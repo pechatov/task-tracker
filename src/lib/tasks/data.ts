@@ -1,0 +1,258 @@
+import { and, asc, desc, eq, isNotNull, lt } from "drizzle-orm";
+import { cache } from "react";
+import { createDb, createPgPool } from "@/db/client";
+import {
+  calendarEvents,
+  connectedCalendars,
+  projects,
+  streams,
+  tasks,
+  users
+} from "@/db/schema";
+import { formatDateInput } from "@/lib/date";
+
+const DEV_USER_EMAIL = "local-dev@example.test";
+
+export type StreamOption = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+export type ProjectOption = {
+  id: string;
+  name: string;
+  color: string;
+  streamId: string;
+  streamName: string;
+};
+
+export type TaskRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string;
+  dayPriority: number;
+  status: "open" | "done" | "cancelled";
+  streamId: string | null;
+  streamName: string | null;
+  streamColor: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  projectColor: string | null;
+  timeBlockStart: Date | null;
+  timeBlockEnd: Date | null;
+};
+
+export type CalendarEventRow = {
+  id: string;
+  title: string;
+  startsAt: Date;
+  endsAt: Date;
+  eventUrl: string | null;
+  location: string | null;
+  calendarName: string;
+  calendarColor: string;
+};
+
+export type TodayData = {
+  today: string;
+  streams: StreamOption[];
+  projects: ProjectOption[];
+  dayTasks: TaskRow[];
+  overdueTasks: TaskRow[];
+  timedTasks: TaskRow[];
+  calendarEvents: CalendarEventRow[];
+  selectedTask: TaskRow | null;
+};
+
+export async function withDb<T>(
+  callback: (db: ReturnType<typeof createDb>) => Promise<T>
+) {
+  const pool = createPgPool();
+  const db = createDb(pool);
+
+  try {
+    return await callback(db);
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function getCurrentUserId(db: ReturnType<typeof createDb>) {
+  const existing = await db.query.users.findFirst({
+    orderBy: asc(users.createdAt)
+  });
+
+  if (existing) {
+    return existing.id;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("No user exists. Create the first user with npm run user:create.");
+  }
+
+  const [created] = await db
+    .insert(users)
+    .values({
+      email: DEV_USER_EMAIL,
+      displayName: "Local Dev",
+      passwordHash: "development-user-created-before-auth-flow"
+    })
+    .returning({ id: users.id });
+
+  return created.id;
+}
+
+export async function getNextDayPriority(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+  dueDate: string
+) {
+  const [latest] = await db
+    .select({ dayPriority: tasks.dayPriority })
+    .from(tasks)
+    .where(and(eq(tasks.userId, userId), eq(tasks.dueDate, dueDate)))
+    .orderBy(desc(tasks.dayPriority))
+    .limit(1);
+
+  return (latest?.dayPriority ?? 0) + 1;
+}
+
+export const getTodayData = cache(async (selectedTaskId?: string) => {
+  return withDb<TodayData>(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const today = formatDateInput();
+
+    const activeStreams = await db
+      .select({
+        id: streams.id,
+        name: streams.name,
+        color: streams.color
+      })
+      .from(streams)
+      .where(and(eq(streams.userId, userId), eq(streams.status, "active")))
+      .orderBy(asc(streams.name));
+
+    const activeProjects = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        color: projects.color,
+        streamId: streams.id,
+        streamName: streams.name
+      })
+      .from(projects)
+      .innerJoin(streams, eq(projects.streamId, streams.id))
+      .where(
+        and(
+          eq(projects.userId, userId),
+          eq(projects.status, "active"),
+          eq(streams.status, "active")
+        )
+      )
+      .orderBy(asc(projects.name));
+
+    const taskSelect = {
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      dueDate: tasks.dueDate,
+      dayPriority: tasks.dayPriority,
+      status: tasks.status,
+      streamId: tasks.streamId,
+      streamName: streams.name,
+      streamColor: streams.color,
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      projectColor: projects.color,
+      timeBlockStart: tasks.timeBlockStart,
+      timeBlockEnd: tasks.timeBlockEnd
+    };
+
+    const openTodayTasks = await db
+      .select(taskSelect)
+      .from(tasks)
+      .leftJoin(streams, eq(tasks.streamId, streams.id))
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, "open"),
+          eq(tasks.dueDate, today)
+        )
+      )
+      .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt));
+
+    const overdueTasks = await db
+      .select(taskSelect)
+      .from(tasks)
+      .leftJoin(streams, eq(tasks.streamId, streams.id))
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, "open"),
+          lt(tasks.dueDate, today)
+        )
+      )
+      .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
+
+    const timedTasks = await db
+      .select(taskSelect)
+      .from(tasks)
+      .leftJoin(streams, eq(tasks.streamId, streams.id))
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, "open"),
+          eq(tasks.dueDate, today),
+          isNotNull(tasks.timeBlockStart)
+        )
+      )
+      .orderBy(asc(tasks.timeBlockStart));
+
+    const todaysCalendarEvents = await db
+      .select({
+        id: calendarEvents.id,
+        title: calendarEvents.title,
+        startsAt: calendarEvents.startsAt,
+        endsAt: calendarEvents.endsAt,
+        eventUrl: calendarEvents.eventUrl,
+        location: calendarEvents.location,
+        calendarName: connectedCalendars.name,
+        calendarColor: connectedCalendars.color
+      })
+      .from(calendarEvents)
+      .innerJoin(
+        connectedCalendars,
+        eq(calendarEvents.connectedCalendarId, connectedCalendars.id)
+      )
+      .where(and(eq(calendarEvents.userId, userId), eq(connectedCalendars.isEnabled, true)))
+      .orderBy(asc(calendarEvents.startsAt));
+
+    const selectedTask = selectedTaskId
+      ? await db
+          .select(taskSelect)
+          .from(tasks)
+          .leftJoin(streams, eq(tasks.streamId, streams.id))
+          .leftJoin(projects, eq(tasks.projectId, projects.id))
+          .where(and(eq(tasks.userId, userId), eq(tasks.id, selectedTaskId)))
+          .limit(1)
+      : [];
+
+    return {
+      today,
+      streams: activeStreams,
+      projects: activeProjects,
+      dayTasks: openTodayTasks,
+      overdueTasks,
+      timedTasks,
+      calendarEvents: todaysCalendarEvents.filter(
+        (event) => formatDateInput(event.startsAt) === today
+      ),
+      selectedTask: selectedTask[0] ?? null
+    };
+  });
+});
