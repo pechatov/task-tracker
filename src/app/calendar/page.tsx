@@ -1,4 +1,5 @@
 import { CalendarDays } from "lucide-react";
+import { requireCurrentUser } from "@/lib/auth/session";
 
 const slots = [
   { time: "09:00", title: "Focus block", type: "task" },
@@ -6,7 +7,9 @@ const slots = [
   { time: "15:00", title: "Review schema", type: "task" }
 ];
 
-export default function CalendarPage() {
+export default async function CalendarPage() {
+  await requireCurrentUser();
+
   return (
     <main className="page">
       <header className="page-header">

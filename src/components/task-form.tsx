@@ -1,4 +1,5 @@
 import { createTask, updateTask } from "@/app/actions/tasks";
+import { TaskContextPicker } from "@/components/task-context-picker";
 import { formatTimeInput } from "@/lib/date";
 import type {
   ProjectOption,
@@ -121,29 +122,11 @@ export function TaskForm({
           </select>
         </label>
 
-        <label className="field">
-          Стрим
-          <select defaultValue={task?.streamId ?? ""} name="streamId">
-            <option value="">Без стрима</option>
-            {streamOptions.map((stream) => (
-              <option key={stream.id} value={stream.id}>
-                {stream.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="field">
-          Проект
-          <select defaultValue={task?.projectId ?? ""} name="projectId">
-            <option value="">Без проекта</option>
-            {projectOptions.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name} · {project.streamName}
-              </option>
-            ))}
-          </select>
-        </label>
+        <TaskContextPicker
+          projects={projectOptions}
+          streams={streamOptions}
+          task={task}
+        />
 
         <div className="field-row full-width">
           <label className="field">
@@ -163,31 +146,6 @@ export function TaskForm({
             />
           </label>
         </div>
-
-        <details className="inline-create full-width">
-          <summary>Создать стрим или проект inline</summary>
-          <div className="inline-create-grid">
-            <label className="field">
-              Новый стрим
-              <input name="newStreamName" placeholder="Например: Работа" />
-            </label>
-            <label className="field">
-              Цвет стрима
-              <input defaultValue="#2d7dd2" name="newStreamColor" type="color" />
-            </label>
-            <label className="field">
-              Новый проект
-              <input name="newProjectName" placeholder="Например: Task Tracker" />
-            </label>
-            <label className="field">
-              Цвет проекта
-              <input defaultValue="#6b8e23" name="newProjectColor" type="color" />
-            </label>
-          </div>
-          <p className="muted">
-            Новый проект будет создан внутри выбранного или нового стрима.
-          </p>
-        </details>
 
         <button className="primary-button full-width" type="submit">
           {isEditing ? "Сохранить" : "Создать задачу"}

@@ -58,7 +58,7 @@ async function readSecret(prompt: string): Promise<string> {
 }
 
 async function main() {
-  const email = getArg("--email");
+  const email = getArg("--email")?.toLowerCase();
   const displayName = getArg("--name");
 
   if (!email) {

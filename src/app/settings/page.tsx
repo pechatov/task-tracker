@@ -1,6 +1,9 @@
 import { RefreshCw, ShieldCheck } from "lucide-react";
+import { requireCurrentUser } from "@/lib/auth/session";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const user = await requireCurrentUser();
+
   return (
     <main className="page">
       <header className="page-header">
@@ -37,10 +40,15 @@ export default function SettingsPage() {
             <h2>Доступ</h2>
             <ShieldCheck size={18} />
           </div>
-          <p className="muted">
-            MVP работает в single-user режиме, но данные уже scoped by user.
-            Первый пользователь создается через CLI.
-          </p>
+          <div className="settings-row">
+            <div>
+              <strong>{user.displayName ?? user.email}</strong>
+              <p>{user.email}</p>
+            </div>
+            <form action="/logout" method="post">
+              <button className="secondary-button" type="submit">Выйти</button>
+            </form>
+          </div>
         </div>
       </section>
     </main>

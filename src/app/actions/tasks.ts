@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { projects, streams, tasks } from "@/db/schema";
+import { getNextContextColor } from "@/lib/context/colors";
 import { combineDateAndTime, formatDateInput } from "@/lib/date";
 import {
   getCurrentUserId,
@@ -11,8 +12,6 @@ import {
   withDb
 } from "@/lib/tasks/data";
 import { isTaskStatus, type TaskStatus } from "@/lib/tasks/status";
-
-const DEFAULT_COLOR = "#2d7dd2";
 
 function getString(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -29,20 +28,13 @@ function getStatus(formData: FormData): TaskStatus {
   return isTaskStatus(value) ? value : "open";
 }
 
-function getColor(formData: FormData, name: string) {
-  const value = getString(formData, name);
-  return value || DEFAULT_COLOR;
-}
-
 async function resolveTaskContext(
   db: Parameters<Parameters<typeof withDb>[0]>[0],
   userId: string,
   formData: FormData
 ) {
   const newStreamName = getString(formData, "newStreamName");
-  const newStreamColor = getColor(formData, "newStreamColor");
   const newProjectName = getString(formData, "newProjectName");
-  const newProjectColor = getColor(formData, "newProjectColor");
   const selectedStreamId = getNullableString(formData, "streamId");
   const selectedProjectId = getNullableString(formData, "projectId");
 
@@ -50,17 +42,23 @@ async function resolveTaskContext(
   let projectId = selectedProjectId;
 
   if (newStreamName) {
+    const streamColors = await db
+      .select({ color: streams.color })
+      .from(streams)
+      .where(eq(streams.userId, userId));
+    const color = getNextContextColor(streamColors.map((stream) => stream.color));
+
     const [stream] = await db
       .insert(streams)
       .values({
         userId,
         name: newStreamName,
-        color: newStreamColor,
+        color,
         status: "active"
       })
       .onConflictDoUpdate({
         target: [streams.userId, streams.name],
-        set: { color: newStreamColor, status: "active", updatedAt: new Date() }
+        set: { status: "active", updatedAt: new Date() }
       })
       .returning({ id: streams.id });
 
@@ -73,18 +71,26 @@ async function resolveTaskContext(
       throw new Error("Project requires an active stream");
     }
 
+    const projectColors = await db
+      .select({ color: projects.color })
+      .from(projects)
+      .where(eq(projects.userId, userId));
+    const color = getNextContextColor(
+      projectColors.map((project) => project.color)
+    );
+
     const [project] = await db
       .insert(projects)
       .values({
         userId,
         streamId,
         name: newProjectName,
-        color: newProjectColor,
+        color,
         status: "active"
       })
       .onConflictDoUpdate({
         target: [projects.userId, projects.streamId, projects.name],
-        set: { color: newProjectColor, status: "active", updatedAt: new Date() }
+        set: { status: "active", updatedAt: new Date() }
       })
       .returning({ id: projects.id, streamId: projects.streamId });
 
