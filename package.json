@@ -1,0 +1,59 @@
+{
+  "name": "task-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "worker:dev": "tsx watch src/worker/index.ts",
+    "worker:start": "tsx src/worker/index.ts",
+    "user:create": "tsx src/scripts/create-user.ts"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@fullcalendar/core": "^6.1.21",
+    "@fullcalendar/interaction": "^6.1.21",
+    "@fullcalendar/react": "^6.1.21",
+    "@fullcalendar/timegrid": "^6.1.21",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "argon2": "^0.44.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "ical.js": "^2.2.1",
+    "iron-session": "^8.0.4",
+    "lucide-react": "^1.22.0",
+    "next": "^16.2.9",
+    "pg": "^8.22.0",
+    "pg-boss": "^12.23.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tsdav": "^2.3.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.0.0",
+    "@types/pg": "^8.16.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.9",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "esbuild": "^0.25.12",
+    "postcss": "^8.5.10"
+  }
+}

@@ -1,0 +1,17 @@
+.next/
+node_modules/
+coverage/
+dist/
+tsconfig.tsbuildinfo
+playwright-report/
+test-results/
+
+.env
+.env*.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+drizzle/meta/_journal.json.tmp
