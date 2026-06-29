@@ -28,6 +28,10 @@ const navItems: NavItem[] = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
+  if (pathname === "/design-preview") {
+    return children;
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">

@@ -1,4 +1,6 @@
-import { RefreshCw, ShieldCheck } from "lucide-react";
+import { Palette, RefreshCw, ShieldCheck, Type } from "lucide-react";
+import { FontSelector } from "@/components/font-selector";
+import { ThemeSelector } from "@/components/theme-selector";
 
 export default function SettingsPage() {
   return (
@@ -6,11 +8,11 @@ export default function SettingsPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Settings</p>
-          <h1>Интеграции и безопасность</h1>
+          <h1>Интеграции, доступ и дизайн</h1>
         </div>
       </header>
 
-      <section className="two-column">
+      <section className="settings-grid">
         <div className="panel">
           <div className="panel-heading">
             <h2>Календари</h2>
@@ -41,6 +43,28 @@ export default function SettingsPage() {
             MVP работает в single-user режиме, но данные уже scoped by user.
             Первый пользователь создается через CLI.
           </p>
+        </div>
+
+        <div className="panel settings-theme-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Дизайн</p>
+              <h2>Тема интерфейса</h2>
+            </div>
+            <Palette size={18} />
+          </div>
+          <ThemeSelector />
+        </div>
+
+        <div className="panel settings-font-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Шрифт</p>
+              <h2>Шрифт интерфейса</h2>
+            </div>
+            <Type size={18} />
+          </div>
+          <FontSelector />
         </div>
       </section>
     </main>
