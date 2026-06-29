@@ -131,6 +131,17 @@ function getTimeBlock(formData: FormData, dueDate: string) {
   return { timeBlockStart, timeBlockEnd };
 }
 
+function parseCalendarDate(formData: FormData, name: string) {
+  const value = getString(formData, name);
+  const date = new Date(value);
+
+  if (!value || Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid calendar ${name}`);
+  }
+
+  return date;
+}
+
 export async function createTask(formData: FormData) {
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
@@ -236,4 +247,50 @@ export async function moveTaskToToday(formData: FormData) {
   });
 
   revalidatePath("/");
+}
+
+export async function scheduleTaskFromCalendar(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+  const isAllDay = getString(formData, "isAllDay") === "true";
+  const startsAt = parseCalendarDate(formData, "startsAt");
+  const endsAt = parseCalendarDate(formData, "endsAt");
+  const dueDate = formatDateInput(startsAt);
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  if (endsAt <= startsAt) {
+    throw new Error("Calendar task end must be after start");
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.userId, userId))
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    const dayPriority =
+      task.dueDate === dueDate
+        ? task.dayPriority
+        : await getNextDayPriority(db, userId, dueDate);
+
+    await db
+      .update(tasks)
+      .set({
+        dueDate,
+        dayPriority,
+        timeBlockStart: isAllDay ? null : startsAt,
+        timeBlockEnd: isAllDay ? null : endsAt,
+        updatedAt: new Date()
+      })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
 }

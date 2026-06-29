@@ -490,53 +490,99 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  min-height: 540px;
   overflow: hidden;
+  position: relative;
 }
 
 .calendar-toolbar {
   align-items: center;
   border-bottom: 1px solid var(--line);
-  color: var(--muted);
   display: flex;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 14px;
   min-height: 54px;
   padding: 0 18px;
 }
 
-.day-grid {
-  display: grid;
+.calendar-title,
+.calendar-controls {
+  align-items: center;
+  display: flex;
+  gap: 10px;
 }
 
-.slot-row {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  min-height: 72px;
-}
-
-.slot-row > .time {
-  border-right: 1px solid var(--line);
+.calendar-title {
   color: var(--muted);
-  padding: 14px;
+  min-width: 0;
 }
 
-.slot-event {
-  align-self: center;
-  background: #f8fafc;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  border-radius: 8px;
+.calendar-title span {
   color: var(--text);
-  justify-self: start;
-  margin-left: 16px;
-  min-height: 42px;
-  min-width: min(320px, calc(100% - 32px));
-  padding: 0 14px;
-  text-align: left;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.slot-event.event {
-  border-left-color: #8d5cf6;
+.calendar-saving {
+  background: #e7f4ed;
+  border-bottom: 1px solid var(--line);
+  color: var(--success);
+  padding: 8px 18px;
+}
+
+.calendar-shell .fc {
+  font-family: inherit;
+}
+
+.calendar-shell .fc-theme-standard td,
+.calendar-shell .fc-theme-standard th,
+.calendar-shell .fc-scrollgrid {
+  border-color: var(--line);
+}
+
+.calendar-shell .fc-scrollgrid {
+  border-left: 0;
+  border-right: 0;
+}
+
+.calendar-shell .fc-col-header-cell,
+.calendar-shell .fc-timegrid-axis,
+.calendar-shell .fc-timegrid-slot-label {
+  background: #fbfaf7;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.calendar-shell .fc-timegrid-slot {
+  height: 32px;
+}
+
+.calendar-shell .fc-event {
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.calendar-shell .fc-event.fc-event-draggable {
+  cursor: grab;
+}
+
+.calendar-shell .fc-event-main {
+  min-width: 0;
+}
+
+.fc-event-inner-content {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-event-inner-content span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .two-column {
@@ -752,6 +798,16 @@ a {
 
   .page {
     padding: 24px 16px;
+  }
+
+  .calendar-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .calendar-controls {
+    flex-wrap: wrap;
   }
 
   .layout-grid,
