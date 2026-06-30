@@ -308,6 +308,10 @@ a {
   gap: 4px;
 }
 
+.logout-form {
+  margin-top: auto;
+}
+
 .nav-link {
   align-items: center;
   border-radius: 8px;
@@ -316,6 +320,14 @@ a {
   gap: 10px;
   min-height: 40px;
   padding: 0 10px;
+}
+
+.logout-button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  width: 100%;
 }
 
 .nav-link.active,
@@ -377,6 +389,7 @@ a {
 }
 
 .stack,
+.context-list,
 .simple-list,
 .timeline,
 .task-list {
@@ -637,24 +650,74 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.inline-create {
+.size-options {
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-muted) 42%, transparent);
-  padding: 10px 12px;
-}
-
-.inline-create summary {
-  color: var(--text);
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.inline-create-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 12px 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
+}
+
+.size-option {
+  min-width: 0;
+}
+
+.size-option input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.size-option span {
+  align-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+  display: flex;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.size-option input:checked + span {
+  background: var(--primary);
+  color: var(--text-on-primary);
+}
+
+.status-cycle {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: flex;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.status-box {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.status-cycle.done .status-box {
+  background: var(--success-surface);
+  border-color: var(--success-line);
+  color: var(--success);
+}
+
+.status-cycle.cancelled .status-box {
+  background: var(--danger-surface);
+  border-color: var(--danger-line);
+  color: var(--danger);
 }
 
 .delete-form {
@@ -679,19 +742,19 @@ a {
   inset: 0;
   justify-content: center;
   overflow: auto;
-  padding: 0;
+  padding: 32px 16px;
   position: fixed;
   z-index: 50;
 }
 
 .task-modal {
   background: var(--background);
-  border: 0;
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.32);
-  min-height: 100vh;
+  max-height: calc(100vh - 64px);
   overflow: auto;
-  width: 100%;
+  width: min(940px, 100%);
 }
 
 .task-modal .task-form-panel {
@@ -736,53 +799,123 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  min-height: 540px;
   overflow: hidden;
+  position: relative;
 }
 
 .calendar-toolbar {
   align-items: center;
   border-bottom: 1px solid var(--line);
-  color: var(--muted);
   display: flex;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 14px;
   min-height: 54px;
   padding: 0 18px;
 }
 
-.day-grid {
-  display: grid;
+.calendar-title,
+.calendar-controls {
+  align-items: center;
+  display: flex;
+  gap: 10px;
 }
 
-.slot-row {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  min-height: 72px;
-}
-
-.slot-row > .time {
-  border-right: 1px solid var(--line);
+.calendar-title {
   color: var(--muted);
-  padding: 14px;
+  min-width: 0;
 }
 
-.slot-event {
-  align-self: center;
-  background: var(--surface-muted);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
-  border-radius: 8px;
+.calendar-title span {
   color: var(--text);
-  justify-self: start;
-  margin-left: 16px;
-  min-height: 42px;
-  min-width: min(320px, calc(100% - 32px));
-  padding: 0 14px;
-  text-align: left;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.slot-event.event {
-  border-left-color: var(--event);
+.calendar-saving {
+  background: var(--success-surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--success);
+  padding: 8px 18px;
+}
+
+.calendar-shell .fc {
+  font-family: inherit;
+}
+
+.calendar-shell .fc-theme-standard td,
+.calendar-shell .fc-theme-standard th,
+.calendar-shell .fc-scrollgrid {
+  border-color: var(--line);
+}
+
+.calendar-shell .fc-scrollgrid {
+  border-left: 0;
+  border-right: 0;
+}
+
+.calendar-shell .fc-col-header-cell,
+.calendar-shell .fc-timegrid-axis,
+.calendar-shell .fc-timegrid-slot-label {
+  background: color-mix(in srgb, var(--surface-muted) 38%, var(--surface));
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.calendar-shell .fc-timegrid-slot {
+  height: 32px;
+}
+
+.calendar-shell .fc-event {
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.calendar-shell .calendar-task-event {
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.calendar-shell .calendar-meeting-event {
+  background: var(--surface) !important;
+  border-left-width: 4px !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.calendar-shell .calendar-meeting-event .fc-event-main {
+  color: var(--text);
+}
+
+.calendar-shell .fc-event.fc-event-draggable {
+  cursor: grab;
+}
+
+.calendar-shell .fc-event-main {
+  min-width: 0;
+}
+
+.fc-event-inner-content {
+  align-items: flex-start;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fc-event-title-text {
+  min-width: 0;
+}
+
+.fc-event-source {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+
+.fc-event-inner-content span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .two-column {
@@ -791,16 +924,268 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.settings-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-panel .panel-heading {
+  margin-bottom: 0;
+}
+
+.settings-message {
+  border-radius: 8px;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.settings-message.success {
+  background: var(--success-surface);
+  border: 1px solid var(--success-line);
+  color: var(--success);
+}
+
+.settings-message.error {
+  background: var(--danger-surface);
+  border: 1px solid var(--danger-line);
+  color: var(--danger);
+}
+
+.settings-form {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 16px;
+}
+
+.settings-form-heading,
+.calendar-source-header,
+.calendar-source-actions,
+.connected-calendar-row,
+.connected-calendar-row label {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.settings-form-heading,
+.calendar-source-header {
+  grid-column: 1 / -1;
+  justify-content: space-between;
+}
+
+.settings-form-heading p,
+.calendar-source-header p {
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+.calendar-source-list {
+  display: grid;
+  gap: 12px;
+}
+
+.calendar-source {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.calendar-source-actions {
+  flex: 0 0 auto;
+}
+
+.danger-icon {
+  color: var(--danger);
+}
+
+.connected-calendar-list {
+  display: grid;
+  gap: 8px;
+}
+
+.connected-calendar-row {
+  justify-content: space-between;
+}
+
+.connected-calendar-row label {
+  min-width: 0;
+}
+
+.connected-calendar-row label span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .color-dot {
+  background: var(--context-color);
   border-radius: 999px;
+  flex: 0 0 auto;
   height: 12px;
   width: 12px;
+}
+
+.management-form {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+}
+
+.management-form .primary-button {
+  grid-column: 1 / -1;
+}
+
+.context-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.context-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.context-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-badge {
+  background: var(--surface-muted);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  min-height: 22px;
+  padding: 0 8px;
+}
+
+.status-badge.active {
+  background: var(--success-surface);
+  color: var(--success);
+}
+
+.compact-button {
+  min-height: 34px;
+}
+
+.combobox-field {
+  position: relative;
+}
+
+.combobox {
+  position: relative;
+}
+
+.combobox input {
+  padding-left: 34px;
+  padding-right: 36px;
+}
+
+.combobox-search-icon,
+.combobox-clear {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.combobox-search-icon {
+  color: var(--muted);
+  left: 11px;
+  pointer-events: none;
+}
+
+.combobox-clear {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  min-height: 30px;
+  padding: 0;
+  right: 6px;
+  width: 30px;
+}
+
+.combobox-menu {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+}
+
+.combobox-option,
+.combobox-empty {
+  align-items: center;
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 36px;
+  padding: 0 8px;
+}
+
+.combobox-option {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  text-align: left;
+  width: 100%;
+}
+
+.combobox-option:hover {
+  background: var(--surface-muted);
+}
+
+.combobox-option.create {
+  color: var(--accent-dark);
+}
+
+.combobox-option-main {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combobox-color {
+  background: var(--context-color);
+  border-radius: 999px;
+  height: 10px;
+  width: 10px;
+}
+
+.combobox-empty {
+  color: var(--muted);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .login-page {
   align-items: center;
   display: flex;
-  min-height: calc(100vh - 68px);
+  min-height: 100vh;
   justify-content: center;
   padding: 24px;
 }
@@ -935,6 +1320,16 @@ a {
     padding: 24px 16px;
   }
 
+  .calendar-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .calendar-controls {
+    flex-wrap: wrap;
+  }
+
   .layout-grid,
   .settings-grid,
   .two-column {
@@ -946,7 +1341,7 @@ a {
     border-top: 1px solid var(--line);
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     left: 0;
     position: fixed;
     right: 0;
@@ -955,6 +1350,8 @@ a {
 
   .bottom-link {
     align-items: center;
+    background: transparent;
+    border: 0;
     color: var(--muted);
     display: grid;
     font-size: 11px;
@@ -982,8 +1379,27 @@ a {
   .field-row,
   .font-selector,
   .inline-create-grid,
+  .management-form,
+  .settings-form,
   .theme-selector {
     grid-template-columns: 1fr;
+  }
+
+  .modal-backdrop {
+    padding: 0;
+  }
+
+  .task-modal {
+    border: 0;
+    border-radius: 0;
+    max-height: none;
+    min-height: 100vh;
+    width: 100%;
+  }
+
+  .context-row {
+    align-items: stretch;
+    grid-template-columns: 12px minmax(0, 1fr);
   }
 
   .overdue-row {
@@ -991,7 +1407,28 @@ a {
     flex-direction: column;
   }
 
+  .calendar-source-header,
+  .connected-calendar-row,
+  .settings-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .context-row form {
+    grid-column: 1 / -1;
+  }
+
   .overdue-row .secondary-button {
+    width: 100%;
+  }
+
+  .context-row .secondary-button {
+    width: 100%;
+  }
+
+  .calendar-source-actions,
+  .connected-calendar-row .secondary-button,
+  .settings-row .secondary-button {
     width: 100%;
   }
 }

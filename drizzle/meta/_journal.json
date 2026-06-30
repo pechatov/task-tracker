@@ -8,6 +8,13 @@
       "when": 1782733627251,
       "tag": "0000_quick_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782760436400,
+      "tag": "0001_overjoyed_sprite",
+      "breakpoints": true
     }
   ]
 }

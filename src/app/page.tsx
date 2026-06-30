@@ -242,6 +242,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
             />
             <form action={deleteTask} className="delete-form">
               <input name="taskId" type="hidden" value={data.selectedTask.id} />
+              <input name="returnTo" type="hidden" value="/" />
               <button className="danger-button" type="submit">
                 Удалить задачу
               </button>

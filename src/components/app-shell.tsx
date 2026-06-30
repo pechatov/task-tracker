@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import {
   CalendarDays,
   FolderKanban,
+  LogOut,
   Settings,
   SunMedium,
   type LucideIcon
@@ -28,7 +29,7 @@ const navItems: NavItem[] = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  if (pathname === "/design-preview") {
+  if (pathname === "/design-preview" || pathname === "/login") {
     return children;
   }
 
@@ -57,6 +58,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        <form action="/logout" method="post" className="logout-form">
+          <button className="nav-link logout-button" type="submit">
+            <LogOut size={18} />
+            Выйти
+          </button>
+        </form>
       </aside>
       <div className="content-shell">{children}</div>
       <nav className="bottom-nav" aria-label="Mobile navigation">
@@ -76,6 +83,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           );
         })}
+        <form action="/logout" method="post">
+          <button className="bottom-link logout-button" type="submit">
+            <LogOut size={18} />
+            <span>Выход</span>
+          </button>
+        </form>
       </nav>
     </div>
   );

@@ -1,17 +1,19 @@
 import { and, asc, desc, eq, isNotNull, lt } from "drizzle-orm";
 import { cache } from "react";
-import { createDb, createPgPool } from "@/db/client";
+import { createDb } from "@/db/client";
+import { withDb } from "@/db/with-db";
 import {
   calendarEvents,
   connectedCalendars,
   projects,
   streams,
-  tasks,
-  users
+  tasks
 } from "@/db/schema";
+import { requireCurrentUserId } from "@/lib/auth/session";
 import { formatDateInput } from "@/lib/date";
 
-const DEV_USER_EMAIL = "local-dev@example.test";
+export { withDb };
+export { requireCurrentUserId as getCurrentUserId } from "@/lib/auth/session";
 
 export type StreamOption = {
   id: string;
@@ -34,6 +36,7 @@ export type TaskRow = {
   dueDate: string;
   dayPriority: number;
   status: "open" | "done" | "cancelled";
+  size: "small" | "medium" | "big";
   streamId: string | null;
   streamName: string | null;
   streamColor: string | null;
@@ -66,44 +69,6 @@ export type TodayData = {
   selectedTask: TaskRow | null;
 };
 
-export async function withDb<T>(
-  callback: (db: ReturnType<typeof createDb>) => Promise<T>
-) {
-  const pool = createPgPool();
-  const db = createDb(pool);
-
-  try {
-    return await callback(db);
-  } finally {
-    await pool.end();
-  }
-}
-
-export async function getCurrentUserId(db: ReturnType<typeof createDb>) {
-  const existing = await db.query.users.findFirst({
-    orderBy: asc(users.createdAt)
-  });
-
-  if (existing) {
-    return existing.id;
-  }
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("No user exists. Create the first user with npm run user:create.");
-  }
-
-  const [created] = await db
-    .insert(users)
-    .values({
-      email: DEV_USER_EMAIL,
-      displayName: "Local Dev",
-      passwordHash: "development-user-created-before-auth-flow"
-    })
-    .returning({ id: users.id });
-
-  return created.id;
-}
-
 export async function getNextDayPriority(
   db: ReturnType<typeof createDb>,
   userId: string,
@@ -121,7 +86,7 @@ export async function getNextDayPriority(
 
 export const getTodayData = cache(async (selectedTaskId?: string) => {
   return withDb<TodayData>(async (db) => {
-    const userId = await getCurrentUserId(db);
+    const userId = await requireCurrentUserId(db);
     const today = formatDateInput();
 
     const activeStreams = await db
@@ -160,6 +125,7 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       dueDate: tasks.dueDate,
       dayPriority: tasks.dayPriority,
       status: tasks.status,
+      size: tasks.size,
       streamId: tasks.streamId,
       streamName: streams.name,
       streamColor: streams.color,

@@ -4,15 +4,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { projects, streams, tasks } from "@/db/schema";
-import { combineDateAndTime, formatDateInput } from "@/lib/date";
+import { getNextContextColor } from "@/lib/context/colors";
+import {
+  combineDateAndTime,
+  formatDateInput,
+  parseDateInputValue
+} from "@/lib/date";
 import {
   getCurrentUserId,
   getNextDayPriority,
   withDb
 } from "@/lib/tasks/data";
+import {
+  getTaskSizeDurationMinutes,
+  isTaskSize,
+  type TaskSize
+} from "@/lib/tasks/size";
 import { isTaskStatus, type TaskStatus } from "@/lib/tasks/status";
-
-const DEFAULT_COLOR = "#2d7dd2";
 
 function getString(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -29,9 +37,17 @@ function getStatus(formData: FormData): TaskStatus {
   return isTaskStatus(value) ? value : "open";
 }
 
-function getColor(formData: FormData, name: string) {
-  const value = getString(formData, name);
-  return value || DEFAULT_COLOR;
+function getSize(formData: FormData): TaskSize {
+  const value = getString(formData, "size");
+  return isTaskSize(value) ? value : "medium";
+}
+
+function getReturnTo(formData: FormData) {
+  return getString(formData, "returnTo") === "/calendar" ? "/calendar" : "/";
+}
+
+function getDueDate(formData: FormData) {
+  return parseDateInputValue(getString(formData, "dueDate"), formatDateInput());
 }
 
 async function resolveTaskContext(
@@ -40,9 +56,7 @@ async function resolveTaskContext(
   formData: FormData
 ) {
   const newStreamName = getString(formData, "newStreamName");
-  const newStreamColor = getColor(formData, "newStreamColor");
   const newProjectName = getString(formData, "newProjectName");
-  const newProjectColor = getColor(formData, "newProjectColor");
   const selectedStreamId = getNullableString(formData, "streamId");
   const selectedProjectId = getNullableString(formData, "projectId");
 
@@ -50,17 +64,23 @@ async function resolveTaskContext(
   let projectId = selectedProjectId;
 
   if (newStreamName) {
+    const streamColors = await db
+      .select({ color: streams.color })
+      .from(streams)
+      .where(eq(streams.userId, userId));
+    const color = getNextContextColor(streamColors.map((stream) => stream.color));
+
     const [stream] = await db
       .insert(streams)
       .values({
         userId,
         name: newStreamName,
-        color: newStreamColor,
+        color,
         status: "active"
       })
       .onConflictDoUpdate({
         target: [streams.userId, streams.name],
-        set: { color: newStreamColor, status: "active", updatedAt: new Date() }
+        set: { status: "active", updatedAt: new Date() }
       })
       .returning({ id: streams.id });
 
@@ -73,18 +93,26 @@ async function resolveTaskContext(
       throw new Error("Project requires an active stream");
     }
 
+    const projectColors = await db
+      .select({ color: projects.color })
+      .from(projects)
+      .where(eq(projects.userId, userId));
+    const color = getNextContextColor(
+      projectColors.map((project) => project.color)
+    );
+
     const [project] = await db
       .insert(projects)
       .values({
         userId,
         streamId,
         name: newProjectName,
-        color: newProjectColor,
+        color,
         status: "active"
       })
       .onConflictDoUpdate({
         target: [projects.userId, projects.streamId, projects.name],
-        set: { color: newProjectColor, status: "active", updatedAt: new Date() }
+        set: { status: "active", updatedAt: new Date() }
       })
       .returning({ id: projects.id, streamId: projects.streamId });
 
@@ -125,11 +153,30 @@ function getTimeBlock(formData: FormData, dueDate: string) {
   return { timeBlockStart, timeBlockEnd };
 }
 
+function parseCalendarDate(formData: FormData, name: string) {
+  const value = getString(formData, name);
+  const date = new Date(value);
+
+  if (!value || Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid calendar ${name}`);
+  }
+
+  return date;
+}
+
+function addMinutes(date: Date, minutes: number) {
+  const result = new Date(date);
+  result.setMinutes(result.getMinutes() + minutes);
+  return result;
+}
+
 export async function createTask(formData: FormData) {
+  const returnTo = getReturnTo(formData);
+
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
     const title = getString(formData, "title");
-    const dueDate = getString(formData, "dueDate") || formatDateInput();
+    const dueDate = getDueDate(formData);
     const rawPriority = Number.parseInt(getString(formData, "dayPriority"), 10);
     const dayPriority = Number.isFinite(rawPriority)
       ? rawPriority
@@ -149,6 +196,7 @@ export async function createTask(formData: FormData) {
       dueDate,
       dayPriority,
       status: getStatus(formData),
+      size: getSize(formData),
       streamId: context.streamId,
       projectId: context.projectId,
       ...timeBlock
@@ -156,15 +204,21 @@ export async function createTask(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/calendar");
+
+  if (returnTo === "/calendar") {
+    redirect(returnTo);
+  }
 }
 
 export async function updateTask(formData: FormData) {
   const taskId = getString(formData, "taskId");
+  const returnTo = getReturnTo(formData);
 
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
     const title = getString(formData, "title");
-    const dueDate = getString(formData, "dueDate") || formatDateInput();
+    const dueDate = getDueDate(formData);
     const rawPriority = Number.parseInt(getString(formData, "dayPriority"), 10);
     const dayPriority = Number.isFinite(rawPriority) ? rawPriority : 1;
 
@@ -183,6 +237,7 @@ export async function updateTask(formData: FormData) {
         dueDate,
         dayPriority,
         status: getStatus(formData),
+        size: getSize(formData),
         streamId: context.streamId,
         projectId: context.projectId,
         ...timeBlock,
@@ -192,11 +247,13 @@ export async function updateTask(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect("/");
+  revalidatePath("/calendar");
+  redirect(returnTo);
 }
 
 export async function deleteTask(formData: FormData) {
   const taskId = getString(formData, "taskId");
+  const returnTo = getReturnTo(formData);
 
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
@@ -206,7 +263,8 @@ export async function deleteTask(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect("/");
+  revalidatePath("/calendar");
+  redirect(returnTo);
 }
 
 export async function moveTaskToToday(formData: FormData) {
@@ -230,4 +288,55 @@ export async function moveTaskToToday(formData: FormData) {
   });
 
   revalidatePath("/");
+}
+
+export async function scheduleTaskFromCalendar(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+  const isAllDay = getString(formData, "isAllDay") === "true";
+  const wasAllDay = getString(formData, "wasAllDay") === "true";
+  const startsAt = parseCalendarDate(formData, "startsAt");
+  let endsAt = parseCalendarDate(formData, "endsAt");
+  const dueDate = formatDateInput(startsAt);
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  if (endsAt <= startsAt) {
+    throw new Error("Calendar task end must be after start");
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.userId, userId))
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    if (wasAllDay && !isAllDay) {
+      endsAt = addMinutes(startsAt, getTaskSizeDurationMinutes(task.size));
+    }
+
+    const dayPriority =
+      task.dueDate === dueDate
+        ? task.dayPriority
+        : await getNextDayPriority(db, userId, dueDate);
+
+    await db
+      .update(tasks)
+      .set({
+        dueDate,
+        dayPriority,
+        timeBlockStart: isAllDay ? null : startsAt,
+        timeBlockEnd: isAllDay ? null : endsAt,
+        updatedAt: new Date()
+      })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
 }

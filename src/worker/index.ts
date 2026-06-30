@@ -1,4 +1,5 @@
 import { setTimeout } from "node:timers/promises";
+import { syncAllActiveCalendarSources } from "../lib/calendar/sync";
 import { getEnv } from "../lib/env";
 
 async function main() {
@@ -14,6 +15,7 @@ async function main() {
   while (true) {
     await setTimeout(pollMs);
     console.info("calendar sync tick");
+    await syncAllActiveCalendarSources();
   }
 }
 
