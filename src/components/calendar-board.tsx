@@ -10,12 +10,16 @@ import type {
   DatesSetArg,
   EventClickArg,
   EventDropArg,
-  EventInput
+  EventInput,
+  DateSelectArg
 } from "@fullcalendar/core";
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { scheduleTaskFromCalendar } from "@/app/actions/tasks";
 import type { CalendarItem } from "@/lib/calendar/data";
+import { formatDisplayDate } from "@/lib/date";
+import { getTaskSizeDurationMinutes, isTaskSize } from "@/lib/tasks/size";
 
 type CalendarBoardProps = {
   initialDate: string;
@@ -23,6 +27,18 @@ type CalendarBoardProps = {
 };
 
 type CalendarView = "timeGridDay" | "timeGridWeek";
+
+function addMinutes(date: Date, minutes: number) {
+  const result = new Date(date);
+  result.setMinutes(result.getMinutes() + minutes);
+  return result;
+}
+
+function subtractDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() - days);
+  return result;
+}
 
 function getEventEnd(start: Date, end: Date | null, allDay: boolean) {
   if (end) {
@@ -40,7 +56,20 @@ function getEventEnd(start: Date, end: Date | null, allDay: boolean) {
   return fallback;
 }
 
-function getTaskScheduleFormData(event: EventDropArg["event"] | EventResizeDoneArg["event"]) {
+function getTaskDurationEnd(event: EventDropArg["event"]) {
+  const taskSize = event.extendedProps.taskSize;
+
+  if (!event.start || !isTaskSize(taskSize)) {
+    return null;
+  }
+
+  return addMinutes(event.start, getTaskSizeDurationMinutes(taskSize));
+}
+
+function getTaskScheduleFormData(
+  event: EventDropArg["event"] | EventResizeDoneArg["event"],
+  wasAllDay: boolean
+) {
   const taskId = event.extendedProps.taskId;
 
   if (typeof taskId !== "string" || !event.start) {
@@ -50,6 +79,7 @@ function getTaskScheduleFormData(event: EventDropArg["event"] | EventResizeDoneA
   const formData = new FormData();
   formData.set("taskId", taskId);
   formData.set("isAllDay", event.allDay ? "true" : "false");
+  formData.set("wasAllDay", wasAllDay ? "true" : "false");
   formData.set("startsAt", event.start.toISOString());
   formData.set("endsAt", getEventEnd(event.start, event.end, event.allDay).toISOString());
 
@@ -57,6 +87,7 @@ function getTaskScheduleFormData(event: EventDropArg["event"] | EventResizeDoneA
 }
 
 export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
+  const router = useRouter();
   const calendarRef = useRef<FullCalendar | null>(null);
   const [view, setView] = useState<CalendarView>("timeGridDay");
   const [title, setTitle] = useState("");
@@ -75,10 +106,14 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
         startEditable: item.kind === "task",
         backgroundColor: item.kind === "task" ? item.color : "#ffffff",
         borderColor: item.color,
+        classNames: [
+          item.kind === "task" ? "calendar-task-event" : "calendar-meeting-event"
+        ],
         textColor: item.kind === "task" ? "#ffffff" : "#24231f",
         extendedProps: {
           kind: item.kind,
           taskId: item.taskId,
+          taskSize: item.taskSize,
           eventUrl: item.eventUrl,
           sourceLabel: item.sourceLabel
         }
@@ -110,14 +145,36 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
   }
 
   function onDatesSet(arg: DatesSetArg) {
-    setTitle(arg.view.title);
+    if (arg.view.type === "timeGridWeek") {
+      setTitle(
+        `${formatDisplayDate(arg.start)} - ${formatDisplayDate(
+          subtractDays(arg.end, 1)
+        )}`
+      );
+      return;
+    }
+
+    setTitle(formatDisplayDate(arg.start));
+  }
+
+  function onSelect(arg: DateSelectArg) {
+    const params = new URLSearchParams({
+      create: "task",
+      start: arg.startStr,
+      end: arg.endStr,
+      allDay: arg.allDay ? "true" : "false"
+    });
+
+    getCalendarApi()?.unselect();
+    router.push(`/calendar?${params.toString()}`);
   }
 
   function scheduleChangedTask(
     event: EventDropArg["event"] | EventResizeDoneArg["event"],
+    wasAllDay: boolean,
     revert: () => void
   ) {
-    const formData = getTaskScheduleFormData(event);
+    const formData = getTaskScheduleFormData(event, wasAllDay);
 
     if (!formData) {
       revert();
@@ -139,7 +196,15 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
       return;
     }
 
-    scheduleChangedTask(arg.event, arg.revert);
+    if (arg.oldEvent.allDay && !arg.event.allDay) {
+      const sizeEnd = getTaskDurationEnd(arg.event);
+
+      if (sizeEnd) {
+        arg.event.setEnd(sizeEnd);
+      }
+    }
+
+    scheduleChangedTask(arg.event, arg.oldEvent.allDay, arg.revert);
   }
 
   function onEventResize(arg: EventResizeDoneArg) {
@@ -148,7 +213,7 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
       return;
     }
 
-    scheduleChangedTask(arg.event, arg.revert);
+    scheduleChangedTask(arg.event, false, arg.revert);
   }
 
   function onEventClick(arg: EventClickArg) {
@@ -156,7 +221,7 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
     const taskId = arg.event.extendedProps.taskId;
 
     if (typeof taskId === "string") {
-      window.location.href = `/?taskId=${taskId}`;
+      router.push(`/calendar?taskId=${taskId}`);
       return;
     }
 
@@ -211,8 +276,11 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
         eventClick={onEventClick}
         eventDrop={onEventDrop}
         eventResize={onEventResize}
+        select={onSelect}
         editable
         droppable
+        selectable
+        selectMirror
         eventResizableFromStart
         allDayMaintainDuration={false}
         allDaySlot
@@ -227,7 +295,13 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
         firstDay={1}
         eventContent={(arg) => (
           <div className="fc-event-inner-content">
-            <span>{arg.event.title}</span>
+            <span className="fc-event-title-text">{arg.event.title}</span>
+            {arg.event.extendedProps.kind === "calendar-event" &&
+            arg.event.extendedProps.sourceLabel ? (
+              <span className="fc-event-source">
+                {arg.event.extendedProps.sourceLabel}
+              </span>
+            ) : null}
             {arg.event.extendedProps.eventUrl ? <ExternalLink size={12} /> : null}
           </div>
         )}

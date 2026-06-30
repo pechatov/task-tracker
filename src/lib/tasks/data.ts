@@ -36,6 +36,7 @@ export type TaskRow = {
   dueDate: string;
   dayPriority: number;
   status: "open" | "done" | "cancelled";
+  size: "small" | "medium" | "big";
   streamId: string | null;
   streamName: string | null;
   streamColor: string | null;
@@ -124,6 +125,7 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       dueDate: tasks.dueDate,
       dayPriority: tasks.dayPriority,
       status: tasks.status,
+      size: tasks.size,
       streamId: tasks.streamId,
       streamName: streams.name,
       streamColor: streams.color,

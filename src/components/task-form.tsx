@@ -1,16 +1,20 @@
 import { createTask, updateTask } from "@/app/actions/tasks";
 import { TaskContextPicker } from "@/components/task-context-picker";
-import { formatTimeInput } from "@/lib/date";
+import { TaskStatusCycle } from "@/components/task-status-cycle";
+import { formatDisplayDate, formatTimeInput } from "@/lib/date";
 import type {
   ProjectOption,
   StreamOption,
   TaskRow
 } from "@/lib/tasks/data";
-import { taskStatusLabels } from "@/lib/tasks/status";
+import { taskSizeLabels } from "@/lib/tasks/size";
 
 type TaskFormProps = {
   defaultDueDate: string;
+  defaultTimeBlockEnd?: Date | null;
+  defaultTimeBlockStart?: Date | null;
   projects: ProjectOption[];
+  returnTo?: "/" | "/calendar";
   streams: StreamOption[];
   task?: TaskRow | null;
 };
@@ -49,7 +53,10 @@ function getProjectOptions(projects: ProjectOption[], task?: TaskRow | null) {
 
 export function TaskForm({
   defaultDueDate,
+  defaultTimeBlockEnd = null,
+  defaultTimeBlockStart = null,
   projects,
+  returnTo = "/",
   streams,
   task
 }: TaskFormProps) {
@@ -57,6 +64,9 @@ export function TaskForm({
   const action = isEditing ? updateTask : createTask;
   const streamOptions = getStreamOptions(streams, task);
   const projectOptions = getProjectOptions(projects, task);
+  const dueDate = task?.dueDate ?? defaultDueDate;
+  const timeBlockStart = task?.timeBlockStart ?? defaultTimeBlockStart;
+  const timeBlockEnd = task?.timeBlockEnd ?? defaultTimeBlockEnd;
 
   return (
     <section className="panel task-form-panel">
@@ -69,6 +79,7 @@ export function TaskForm({
 
       <form action={action} className="task-form">
         {task ? <input name="taskId" type="hidden" value={task.id} /> : null}
+        <input name="returnTo" type="hidden" value={returnTo} />
 
         <label className="field full-width">
           Название
@@ -93,10 +104,13 @@ export function TaskForm({
         <label className="field">
           Дата выполнения
           <input
-            defaultValue={task?.dueDate ?? defaultDueDate}
+            defaultValue={formatDisplayDate(dueDate)}
+            inputMode="numeric"
             name="dueDate"
+            pattern="\d{2}-\d{2}-\d{4}"
+            placeholder="дд-мм-гггг"
             required
-            type="date"
+            type="text"
           />
         </label>
 
@@ -111,16 +125,24 @@ export function TaskForm({
           />
         </label>
 
-        <label className="field">
-          Состояние
-          <select defaultValue={task?.status ?? "open"} name="status">
-            {Object.entries(taskStatusLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
+        <TaskStatusCycle initialStatus={task?.status ?? "open"} />
+
+        <div className="field">
+          <span>Размер</span>
+          <div className="size-options">
+            {Object.entries(taskSizeLabels).map(([value, label]) => (
+              <label className="size-option" key={value}>
+                <input
+                  defaultChecked={(task?.size ?? "medium") === value}
+                  name="size"
+                  type="radio"
+                  value={value}
+                />
+                <span>{label}</span>
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
 
         <TaskContextPicker
           projects={projectOptions}
@@ -132,7 +154,7 @@ export function TaskForm({
           <label className="field">
             Начало блока
             <input
-              defaultValue={formatTimeInput(task?.timeBlockStart ?? null)}
+              defaultValue={formatTimeInput(timeBlockStart)}
               name="timeBlockStart"
               type="time"
             />
@@ -140,7 +162,7 @@ export function TaskForm({
           <label className="field">
             Конец блока
             <input
-              defaultValue={formatTimeInput(task?.timeBlockEnd ?? null)}
+              defaultValue={formatTimeInput(timeBlockEnd)}
               name="timeBlockEnd"
               type="time"
             />

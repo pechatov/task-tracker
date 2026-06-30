@@ -10,6 +10,8 @@ import {
 import { requireCurrentUserId } from "@/lib/auth/session";
 import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { formatDateInput } from "@/lib/date";
+import type { ProjectOption, StreamOption, TaskRow } from "@/lib/tasks/data";
+import { getTaskSizeDurationMinutes, type TaskSize } from "@/lib/tasks/size";
 
 export type CalendarItem = {
   id: string;
@@ -21,6 +23,7 @@ export type CalendarItem = {
   editable: boolean;
   color: string;
   taskId: string | null;
+  taskSize: TaskSize | null;
   eventUrl: string | null;
   sourceLabel: string | null;
 };
@@ -28,6 +31,9 @@ export type CalendarItem = {
 export type CalendarData = {
   today: string;
   items: CalendarItem[];
+  projects: ProjectOption[];
+  selectedTask: TaskRow | null;
+  streams: StreamOption[];
 };
 
 function addDays(date: string, days: number) {
@@ -36,9 +42,9 @@ function addDays(date: string, days: number) {
   return formatDateInput(result);
 }
 
-function fallbackTimedTaskEnd(startsAt: Date) {
+function getTaskSizeEnd(startsAt: Date, size: TaskSize) {
   const endsAt = new Date(startsAt);
-  endsAt.setHours(endsAt.getHours() + 1);
+  endsAt.setMinutes(endsAt.getMinutes() + getTaskSizeDurationMinutes(size));
   return endsAt;
 }
 
@@ -54,7 +60,7 @@ function getEventUrl(event: { eventUrl: string | null; location: string | null }
   return null;
 }
 
-export async function getCalendarData(): Promise<CalendarData> {
+export async function getCalendarData(selectedTaskId?: string): Promise<CalendarData> {
   return withDb(async (db) => {
     const userId = await requireCurrentUserId(db);
     const today = formatDateInput();
@@ -62,18 +68,55 @@ export async function getCalendarData(): Promise<CalendarData> {
     const windowStart = formatDateInput(syncWindow.startsAt);
     const windowEnd = formatDateInput(syncWindow.endsAt);
 
-    const taskRows = await db
+    const activeStreams = await db
       .select({
-        id: tasks.id,
-        title: tasks.title,
-        dueDate: tasks.dueDate,
-        streamName: streams.name,
-        streamColor: streams.color,
-        projectName: projects.name,
-        projectColor: projects.color,
-        timeBlockStart: tasks.timeBlockStart,
-        timeBlockEnd: tasks.timeBlockEnd
+        id: streams.id,
+        name: streams.name,
+        color: streams.color
       })
+      .from(streams)
+      .where(and(eq(streams.userId, userId), eq(streams.status, "active")))
+      .orderBy(asc(streams.name));
+
+    const activeProjects = await db
+      .select({
+        id: projects.id,
+        name: projects.name,
+        color: projects.color,
+        streamId: streams.id,
+        streamName: streams.name
+      })
+      .from(projects)
+      .innerJoin(streams, eq(projects.streamId, streams.id))
+      .where(
+        and(
+          eq(projects.userId, userId),
+          eq(projects.status, "active"),
+          eq(streams.status, "active")
+        )
+      )
+      .orderBy(asc(projects.name));
+
+    const taskSelect = {
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      dueDate: tasks.dueDate,
+      dayPriority: tasks.dayPriority,
+      status: tasks.status,
+      size: tasks.size,
+      streamId: tasks.streamId,
+      streamName: streams.name,
+      streamColor: streams.color,
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      projectColor: projects.color,
+      timeBlockStart: tasks.timeBlockStart,
+      timeBlockEnd: tasks.timeBlockEnd
+    };
+
+    const taskRows = await db
+      .select(taskSelect)
       .from(tasks)
       .leftJoin(streams, eq(tasks.streamId, streams.id))
       .leftJoin(projects, eq(tasks.projectId, projects.id))
@@ -114,6 +157,16 @@ export async function getCalendarData(): Promise<CalendarData> {
       )
       .orderBy(asc(calendarEvents.startsAt));
 
+    const selectedTask = selectedTaskId
+      ? await db
+          .select(taskSelect)
+          .from(tasks)
+          .leftJoin(streams, eq(tasks.streamId, streams.id))
+          .leftJoin(projects, eq(tasks.projectId, projects.id))
+          .where(and(eq(tasks.userId, userId), eq(tasks.id, selectedTaskId)))
+          .limit(1)
+      : [];
+
     const taskItems: CalendarItem[] = taskRows.map((task) => {
       const color = task.projectColor ?? task.streamColor ?? "#2d7dd2";
       const label = task.projectName ?? task.streamName;
@@ -125,11 +178,12 @@ export async function getCalendarData(): Promise<CalendarData> {
           kind: "task",
           title,
           start: task.timeBlockStart.toISOString(),
-          end: (task.timeBlockEnd ?? fallbackTimedTaskEnd(task.timeBlockStart)).toISOString(),
+          end: (task.timeBlockEnd ?? getTaskSizeEnd(task.timeBlockStart, task.size)).toISOString(),
           allDay: false,
           editable: true,
           color,
           taskId: task.id,
+          taskSize: task.size,
           eventUrl: null,
           sourceLabel: label
         };
@@ -145,6 +199,7 @@ export async function getCalendarData(): Promise<CalendarData> {
         editable: true,
         color,
         taskId: task.id,
+        taskSize: task.size,
         eventUrl: null,
         sourceLabel: label
       };
@@ -160,13 +215,17 @@ export async function getCalendarData(): Promise<CalendarData> {
       editable: false,
       color: event.calendarColor,
       taskId: null,
+      taskSize: null,
       eventUrl: getEventUrl(event),
       sourceLabel: event.calendarName
     }));
 
     return {
       today,
-      items: [...taskItems, ...calendarItems]
+      items: [...taskItems, ...calendarItems],
+      projects: activeProjects,
+      selectedTask: selectedTask[0] ?? null,
+      streams: activeStreams
     };
   });
 }

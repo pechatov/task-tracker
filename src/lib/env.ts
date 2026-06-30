@@ -18,6 +18,17 @@ const intFromString = (defaultValue: number) =>
       return parsed;
     });
 
+const optionalString = z
+  .string()
+  .optional()
+  .transform((value) => {
+    if (value == null || value.trim() === "") {
+      return undefined;
+    }
+
+    return value;
+  });
+
 const envSchema = z.object({
   APP_BASE_URL: z.url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1),
@@ -26,7 +37,10 @@ const envSchema = z.object({
   AUTH_SESSION_SECRET: z.string().min(32),
   CALENDAR_SYNC_PAST_DAYS: intFromString(60),
   CALENDAR_SYNC_FUTURE_DAYS: intFromString(60),
-  CALENDAR_SYNC_POLL_SECONDS: intFromString(600)
+  CALENDAR_SYNC_POLL_SECONDS: intFromString(600),
+  MICROSOFT_CLIENT_ID: optionalString,
+  MICROSOFT_CLIENT_SECRET: optionalString,
+  MICROSOFT_TENANT_ID: optionalString.default("common")
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

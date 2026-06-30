@@ -1,11 +1,5 @@
-import { getCalendarSyncWindow } from "../../lib/calendar/sync-window";
+import { syncEnabledCalendarsForUser as syncUserCalendars } from "../../lib/calendar/sync";
 
 export async function syncEnabledCalendarsForUser(userId: string) {
-  const syncWindow = getCalendarSyncWindow();
-
-  console.info("calendar sync placeholder", {
-    userId,
-    startsAt: syncWindow.startsAt.toISOString(),
-    endsAt: syncWindow.endsAt.toISOString()
-  });
+  await syncUserCalendars(userId);
 }

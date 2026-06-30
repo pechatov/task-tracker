@@ -20,6 +20,8 @@ export const taskStatus = pgEnum("task_status", [
   "cancelled"
 ]);
 
+export const taskSize = pgEnum("task_size", ["small", "medium", "big"]);
+
 export const contextStatus = pgEnum("context_status", [
   "active",
   "completed"
@@ -135,6 +137,7 @@ export const tasks = pgTable(
     dueDate: date("due_date", { mode: "string" }).notNull(),
     dayPriority: integer("day_priority").notNull(),
     status: taskStatus("status").default("open").notNull(),
+    size: taskSize("size").default("medium").notNull(),
     streamId: uuid("stream_id").references(() => streams.id, {
       onDelete: "set null"
     }),

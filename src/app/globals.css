@@ -411,6 +411,76 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.size-options {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
+}
+
+.size-option {
+  min-width: 0;
+}
+
+.size-option input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.size-option span {
+  align-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+  display: flex;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.size-option input:checked + span {
+  background: var(--text);
+  color: white;
+}
+
+.status-cycle {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: flex;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.status-box {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.status-cycle.done .status-box {
+  background: #e7f4ed;
+  border-color: #b8dfc9;
+  color: var(--success);
+}
+
+.status-cycle.cancelled .status-box {
+  background: #fff5f4;
+  border-color: #edc4c0;
+  color: var(--danger);
+}
+
 .delete-form {
   margin: 14px auto 32px;
   max-width: 900px;
@@ -433,19 +503,19 @@ a {
   inset: 0;
   justify-content: center;
   overflow: auto;
-  padding: 0;
+  padding: 32px 16px;
   position: fixed;
   z-index: 50;
 }
 
 .task-modal {
   background: var(--background);
-  border: 0;
-  border-radius: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.32);
-  min-height: 100vh;
+  max-height: calc(100vh - 64px);
   overflow: auto;
-  width: 100%;
+  width: min(940px, 100%);
 }
 
 .task-modal .task-form-panel {
@@ -564,6 +634,20 @@ a {
   padding: 2px 4px;
 }
 
+.calendar-shell .calendar-task-event {
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.calendar-shell .calendar-meeting-event {
+  background: #fffefd !important;
+  border-left-width: 4px !important;
+  box-shadow: inset 0 0 0 1px rgba(36, 35, 31, 0.04);
+}
+
+.calendar-shell .calendar-meeting-event .fc-event-main {
+  color: var(--text);
+}
+
 .calendar-shell .fc-event.fc-event-draggable {
   cursor: grab;
 }
@@ -573,10 +657,20 @@ a {
 }
 
 .fc-event-inner-content {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: 4px;
   min-width: 0;
+}
+
+.fc-event-title-text {
+  min-width: 0;
+}
+
+.fc-event-source {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 11px;
 }
 
 .fc-event-inner-content span {
@@ -589,6 +683,101 @@ a {
   display: grid;
   gap: 22px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-panel .panel-heading {
+  margin-bottom: 0;
+}
+
+.settings-message {
+  border-radius: 8px;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.settings-message.success {
+  background: #e7f4ed;
+  color: var(--success);
+}
+
+.settings-message.error {
+  background: #fff5f4;
+  color: var(--danger);
+}
+
+.settings-form {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 16px;
+}
+
+.settings-form-heading,
+.calendar-source-header,
+.calendar-source-actions,
+.connected-calendar-row,
+.connected-calendar-row label {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.settings-form-heading,
+.calendar-source-header {
+  grid-column: 1 / -1;
+  justify-content: space-between;
+}
+
+.settings-form-heading p,
+.calendar-source-header p {
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+.calendar-source-list {
+  display: grid;
+  gap: 12px;
+}
+
+.calendar-source {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.calendar-source-actions {
+  flex: 0 0 auto;
+}
+
+.danger-icon {
+  color: var(--danger);
+}
+
+.connected-calendar-list {
+  display: grid;
+  gap: 8px;
+}
+
+.connected-calendar-row {
+  justify-content: space-between;
+}
+
+.connected-calendar-row label {
+  min-width: 0;
+}
+
+.connected-calendar-row label span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .color-dot {
@@ -856,8 +1045,21 @@ a {
 
   .task-form,
   .field-row,
-  .management-form {
+  .management-form,
+  .settings-form {
     grid-template-columns: 1fr;
+  }
+
+  .modal-backdrop {
+    padding: 0;
+  }
+
+  .task-modal {
+    border: 0;
+    border-radius: 0;
+    max-height: none;
+    min-height: 100vh;
+    width: 100%;
   }
 
   .context-row {
@@ -866,6 +1068,13 @@ a {
   }
 
   .overdue-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calendar-source-header,
+  .connected-calendar-row,
+  .settings-row {
     align-items: stretch;
     flex-direction: column;
   }
@@ -879,6 +1088,12 @@ a {
   }
 
   .context-row .secondary-button {
+    width: 100%;
+  }
+
+  .calendar-source-actions,
+  .connected-calendar-row .secondary-button,
+  .settings-row .secondary-button {
     width: 100%;
   }
 }

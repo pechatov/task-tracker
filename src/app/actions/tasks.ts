@@ -5,12 +5,21 @@ import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { projects, streams, tasks } from "@/db/schema";
 import { getNextContextColor } from "@/lib/context/colors";
-import { combineDateAndTime, formatDateInput } from "@/lib/date";
+import {
+  combineDateAndTime,
+  formatDateInput,
+  parseDateInputValue
+} from "@/lib/date";
 import {
   getCurrentUserId,
   getNextDayPriority,
   withDb
 } from "@/lib/tasks/data";
+import {
+  getTaskSizeDurationMinutes,
+  isTaskSize,
+  type TaskSize
+} from "@/lib/tasks/size";
 import { isTaskStatus, type TaskStatus } from "@/lib/tasks/status";
 
 function getString(formData: FormData, name: string) {
@@ -26,6 +35,19 @@ function getNullableString(formData: FormData, name: string) {
 function getStatus(formData: FormData): TaskStatus {
   const value = getString(formData, "status");
   return isTaskStatus(value) ? value : "open";
+}
+
+function getSize(formData: FormData): TaskSize {
+  const value = getString(formData, "size");
+  return isTaskSize(value) ? value : "medium";
+}
+
+function getReturnTo(formData: FormData) {
+  return getString(formData, "returnTo") === "/calendar" ? "/calendar" : "/";
+}
+
+function getDueDate(formData: FormData) {
+  return parseDateInputValue(getString(formData, "dueDate"), formatDateInput());
 }
 
 async function resolveTaskContext(
@@ -142,11 +164,19 @@ function parseCalendarDate(formData: FormData, name: string) {
   return date;
 }
 
+function addMinutes(date: Date, minutes: number) {
+  const result = new Date(date);
+  result.setMinutes(result.getMinutes() + minutes);
+  return result;
+}
+
 export async function createTask(formData: FormData) {
+  const returnTo = getReturnTo(formData);
+
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
     const title = getString(formData, "title");
-    const dueDate = getString(formData, "dueDate") || formatDateInput();
+    const dueDate = getDueDate(formData);
     const rawPriority = Number.parseInt(getString(formData, "dayPriority"), 10);
     const dayPriority = Number.isFinite(rawPriority)
       ? rawPriority
@@ -166,6 +196,7 @@ export async function createTask(formData: FormData) {
       dueDate,
       dayPriority,
       status: getStatus(formData),
+      size: getSize(formData),
       streamId: context.streamId,
       projectId: context.projectId,
       ...timeBlock
@@ -173,15 +204,21 @@ export async function createTask(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/calendar");
+
+  if (returnTo === "/calendar") {
+    redirect(returnTo);
+  }
 }
 
 export async function updateTask(formData: FormData) {
   const taskId = getString(formData, "taskId");
+  const returnTo = getReturnTo(formData);
 
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
     const title = getString(formData, "title");
-    const dueDate = getString(formData, "dueDate") || formatDateInput();
+    const dueDate = getDueDate(formData);
     const rawPriority = Number.parseInt(getString(formData, "dayPriority"), 10);
     const dayPriority = Number.isFinite(rawPriority) ? rawPriority : 1;
 
@@ -200,6 +237,7 @@ export async function updateTask(formData: FormData) {
         dueDate,
         dayPriority,
         status: getStatus(formData),
+        size: getSize(formData),
         streamId: context.streamId,
         projectId: context.projectId,
         ...timeBlock,
@@ -209,11 +247,13 @@ export async function updateTask(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect("/");
+  revalidatePath("/calendar");
+  redirect(returnTo);
 }
 
 export async function deleteTask(formData: FormData) {
   const taskId = getString(formData, "taskId");
+  const returnTo = getReturnTo(formData);
 
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
@@ -223,7 +263,8 @@ export async function deleteTask(formData: FormData) {
   });
 
   revalidatePath("/");
-  redirect("/");
+  revalidatePath("/calendar");
+  redirect(returnTo);
 }
 
 export async function moveTaskToToday(formData: FormData) {
@@ -252,8 +293,9 @@ export async function moveTaskToToday(formData: FormData) {
 export async function scheduleTaskFromCalendar(formData: FormData) {
   const taskId = getString(formData, "taskId");
   const isAllDay = getString(formData, "isAllDay") === "true";
+  const wasAllDay = getString(formData, "wasAllDay") === "true";
   const startsAt = parseCalendarDate(formData, "startsAt");
-  const endsAt = parseCalendarDate(formData, "endsAt");
+  let endsAt = parseCalendarDate(formData, "endsAt");
   const dueDate = formatDateInput(startsAt);
 
   if (!taskId) {
@@ -272,6 +314,10 @@ export async function scheduleTaskFromCalendar(formData: FormData) {
 
     if (!task) {
       throw new Error("Task not found");
+    }
+
+    if (wasAllDay && !isAllDay) {
+      endsAt = addMinutes(startsAt, getTaskSizeDurationMinutes(task.size));
     }
 
     const dayPriority =
