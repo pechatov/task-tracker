@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { deleteTask, moveTaskToToday } from "@/app/actions/tasks";
+import { QuickAddTask } from "@/components/quick-add-task";
 import { TaskForm } from "@/components/task-form";
 import {
   formatDisplayDate,
@@ -100,28 +101,61 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         </div>
       </header>
 
-      <section className="layout-grid">
-        <TaskForm
-          defaultDueDate={data.today}
-          projects={data.projects}
-          streams={data.streams}
-        />
+      <section className="stack">
+        <QuickAddTask>
+          <TaskForm projects={data.projects} streams={data.streams} />
+        </QuickAddTask>
 
-        <div className="stack">
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Задачи дня</p>
+              <h2>Открытые задачи</h2>
+            </div>
+            <span className="counter">{data.dayTasks.length}</span>
+          </div>
+          <div className="task-list">
+            {data.dayTasks.length === 0 ? (
+              <p className="empty-state">На сегодня нет открытых задач.</p>
+            ) : null}
+            {data.dayTasks.map((task) => (
+              <TaskRowLink key={task.id} task={task} />
+            ))}
+          </div>
+        </section>
+
+        <div className="two-column">
           <section className="panel">
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Задачи дня</p>
-                <h2>Открытые задачи</h2>
+                <p className="eyebrow">Без даты</p>
+                <h2>Бэклог</h2>
               </div>
-              <span className="counter">{data.dayTasks.length}</span>
+              <span className="counter">{data.backlogTasks.length}</span>
             </div>
             <div className="task-list">
-              {data.dayTasks.length === 0 ? (
-                <p className="empty-state">На сегодня нет открытых задач.</p>
+              {data.backlogTasks.length === 0 ? (
+                <p className="empty-state">
+                  В бэклоге пусто. Задачи без даты выполнения появятся здесь.
+                </p>
               ) : null}
-              {data.dayTasks.map((task) => (
-                <TaskRowLink key={task.id} task={task} />
+              {data.backlogTasks.map((task) => (
+                <div className="task-row backlog-row" key={task.id}>
+                  <Link className="task-main" href={`/?taskId=${task.id}`}>
+                    <span className="task-title">{task.title}</span>
+                    <TaskLabels task={task} />
+                  </Link>
+                  <form action={moveTaskToToday}>
+                    <input name="taskId" type="hidden" value={task.id} />
+                    <button
+                      className="secondary-button compact-button"
+                      type="submit"
+                    >
+                      <Clock3 size={15} />
+                      На сегодня
+                    </button>
+                  </form>
+                </div>
               ))}
             </div>
           </section>
@@ -193,37 +227,41 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
               ))}
             </div>
           </section>
-
-          <section className="panel attention">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Просроченные</p>
-                <h2>Нужно перенести</h2>
-              </div>
-              <AlertTriangle size={20} />
-            </div>
-            {data.overdueTasks.length === 0 ? (
-              <p className="empty-state">Просроченных открытых задач нет.</p>
-            ) : null}
-            {data.overdueTasks.map((task) => (
-              <div className="overdue-row" key={task.id}>
-                <div>
-                  <Link href={`/?taskId=${task.id}`}>
-                    <strong>{task.title}</strong>
-                  </Link>
-                  <p>Дата выполнения: {formatDisplayDate(task.dueDate)}</p>
-                </div>
-                <form action={moveTaskToToday}>
-                  <input name="taskId" type="hidden" value={task.id} />
-                  <button className="secondary-button" type="submit">
-                    <Clock3 size={16} />
-                    На сегодня
-                  </button>
-                </form>
-              </div>
-            ))}
-          </section>
         </div>
+
+        <section className="panel attention">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Просроченные</p>
+              <h2>Нужно перенести</h2>
+            </div>
+            <AlertTriangle size={20} />
+          </div>
+          {data.overdueTasks.length === 0 ? (
+            <p className="empty-state">Просроченных открытых задач нет.</p>
+          ) : null}
+          {data.overdueTasks.map((task) => (
+            <div className="overdue-row" key={task.id}>
+              <div className="task-main">
+                <Link href={`/?taskId=${task.id}`}>
+                  <strong>{task.title}</strong>
+                </Link>
+                <TaskLabels task={task} />
+                <p>
+                  Дата выполнения:{" "}
+                  {task.dueDate ? formatDisplayDate(task.dueDate) : "—"}
+                </p>
+              </div>
+              <form action={moveTaskToToday}>
+                <input name="taskId" type="hidden" value={task.id} />
+                <button className="secondary-button" type="submit">
+                  <Clock3 size={16} />
+                  На сегодня
+                </button>
+              </form>
+            </div>
+          ))}
+        </section>
       </section>
 
       {data.selectedTask ? (
@@ -235,7 +273,6 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
               </Link>
             </div>
             <TaskForm
-              defaultDueDate={data.today}
               projects={data.projects}
               streams={data.streams}
               task={data.selectedTask}

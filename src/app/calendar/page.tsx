@@ -69,7 +69,11 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
         </div>
       </header>
 
-      <CalendarBoard initialDate={data.today} items={data.items} />
+      <CalendarBoard
+        backlogTasks={data.backlogTasks}
+        initialDate={data.today}
+        items={data.items}
+      />
 
       {data.selectedTask ? (
         <div className="modal-backdrop">
@@ -80,7 +84,6 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
               </Link>
             </div>
             <TaskForm
-              defaultDueDate={data.today}
               projects={data.projects}
               returnTo="/calendar"
               streams={data.streams}

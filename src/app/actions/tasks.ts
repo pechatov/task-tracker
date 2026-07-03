@@ -47,7 +47,8 @@ function getReturnTo(formData: FormData) {
 }
 
 function getDueDate(formData: FormData) {
-  return parseDateInputValue(getString(formData, "dueDate"), formatDateInput());
+  const value = getString(formData, "dueDate");
+  return value ? parseDateInputValue(value) : null;
 }
 
 async function resolveTaskContext(
@@ -131,7 +132,7 @@ async function resolveTaskContext(
   return { streamId, projectId };
 }
 
-function getTimeBlock(formData: FormData, dueDate: string) {
+function getTimeBlock(formData: FormData, dueDate: string | null) {
   const start = getString(formData, "timeBlockStart");
   const end = getString(formData, "timeBlockEnd");
 
@@ -141,6 +142,10 @@ function getTimeBlock(formData: FormData, dueDate: string) {
 
   if (!start || !end) {
     throw new Error("Both time block start and end are required");
+  }
+
+  if (!dueDate) {
+    throw new Error("Time block requires a due date");
   }
 
   const timeBlockStart = combineDateAndTime(dueDate, start);

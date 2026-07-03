@@ -134,7 +134,7 @@ export const tasks = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description"),
-    dueDate: date("due_date", { mode: "string" }).notNull(),
+    dueDate: date("due_date", { mode: "string" }),
     dayPriority: integer("day_priority").notNull(),
     status: taskStatus("status").default("open").notNull(),
     size: taskSize("size").default("medium").notNull(),

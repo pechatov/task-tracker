@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte } from "drizzle-orm";
 import { withDb } from "@/db/with-db";
 import {
   calendarEvents,
@@ -31,6 +31,7 @@ export type CalendarItem = {
 export type CalendarData = {
   today: string;
   items: CalendarItem[];
+  backlogTasks: TaskRow[];
   projects: ProjectOption[];
   selectedTask: TaskRow | null;
   streams: StreamOption[];
@@ -130,6 +131,20 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       )
       .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
 
+    const backlogTasks = await db
+      .select(taskSelect)
+      .from(tasks)
+      .leftJoin(streams, eq(tasks.streamId, streams.id))
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, "open"),
+          isNull(tasks.dueDate)
+        )
+      )
+      .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt));
+
     const eventRows = await db
       .select({
         id: calendarEvents.id,
@@ -167,7 +182,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           .limit(1)
       : [];
 
-    const taskItems: CalendarItem[] = taskRows.map((task) => {
+    const taskItems: CalendarItem[] = taskRows.flatMap((task) => {
       const color = task.projectColor ?? task.streamColor ?? "#2d7dd2";
       const label = task.projectName ?? task.streamName;
       const title = label ? `${task.title} · ${label}` : task.title;
@@ -175,7 +190,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       if (task.timeBlockStart) {
         return {
           id: `task-${task.id}`,
-          kind: "task",
+          kind: "task" as const,
           title,
           start: task.timeBlockStart.toISOString(),
           end: (task.timeBlockEnd ?? getTaskSizeEnd(task.timeBlockStart, task.size)).toISOString(),
@@ -189,9 +204,13 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
         };
       }
 
+      if (!task.dueDate) {
+        return [];
+      }
+
       return {
         id: `task-${task.id}`,
-        kind: "task",
+        kind: "task" as const,
         title,
         start: task.dueDate,
         end: addDays(task.dueDate, 1),
@@ -223,6 +242,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
     return {
       today,
       items: [...taskItems, ...calendarItems],
+      backlogTasks,
       projects: activeProjects,
       selectedTask: selectedTask[0] ?? null,
       streams: activeStreams

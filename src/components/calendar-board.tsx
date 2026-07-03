@@ -2,6 +2,8 @@
 
 import FullCalendar from "@fullcalendar/react";
 import interactionPlugin, {
+  Draggable,
+  type EventReceiveArg,
   type EventResizeDoneArg
 } from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
@@ -13,15 +15,22 @@ import type {
   EventInput,
   DateSelectArg
 } from "@fullcalendar/core";
-import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import type { CSSProperties } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, Inbox } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { scheduleTaskFromCalendar } from "@/app/actions/tasks";
 import type { CalendarItem } from "@/lib/calendar/data";
 import { formatDisplayDate } from "@/lib/date";
-import { getTaskSizeDurationMinutes, isTaskSize } from "@/lib/tasks/size";
+import type { TaskRow } from "@/lib/tasks/data";
+import {
+  getTaskSizeDurationMinutes,
+  isTaskSize,
+  taskSizeLabels
+} from "@/lib/tasks/size";
 
 type CalendarBoardProps = {
+  backlogTasks: TaskRow[];
   initialDate: string;
   items: CalendarItem[];
 };
@@ -86,12 +95,40 @@ function getTaskScheduleFormData(
   return formData;
 }
 
-export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
+export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoardProps) {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar | null>(null);
-  const [view, setView] = useState<CalendarView>("timeGridDay");
+  const backlogRef = useRef<HTMLDivElement | null>(null);
+  const [view, setView] = useState<CalendarView>("timeGridWeek");
   const [title, setTitle] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!backlogRef.current) {
+      return;
+    }
+
+    const draggable = new Draggable(backlogRef.current, {
+      itemSelector: ".calendar-backlog-item",
+      eventData: (element) => ({
+        title: element.dataset.title ?? "",
+        duration: {
+          minutes: Number(element.dataset.durationMinutes) || 60
+        },
+        backgroundColor: element.dataset.color,
+        borderColor: element.dataset.color,
+        textColor: "#ffffff",
+        classNames: ["calendar-task-event"],
+        extendedProps: {
+          kind: "task",
+          taskId: element.dataset.taskId,
+          taskSize: element.dataset.taskSize
+        }
+      })
+    });
+
+    return () => draggable.destroy();
+  }, []);
 
   const events = useMemo<EventInput[]>(
     () =>
@@ -216,6 +253,35 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
     scheduleChangedTask(arg.event, false, arg.revert);
   }
 
+  function onEventReceive(arg: EventReceiveArg) {
+    const taskId = arg.event.extendedProps.taskId;
+
+    if (typeof taskId !== "string" || !arg.event.start) {
+      arg.revert();
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("taskId", taskId);
+    formData.set("isAllDay", arg.event.allDay ? "true" : "false");
+    formData.set("wasAllDay", "true");
+    formData.set("startsAt", arg.event.start.toISOString());
+    formData.set(
+      "endsAt",
+      getEventEnd(arg.event.start, arg.event.end, arg.event.allDay).toISOString()
+    );
+
+    startTransition(async () => {
+      try {
+        await scheduleTaskFromCalendar(formData);
+        arg.event.remove();
+        router.refresh();
+      } catch {
+        arg.revert();
+      }
+    });
+  }
+
   function onEventClick(arg: EventClickArg) {
     const eventUrl = arg.event.extendedProps.eventUrl;
     const taskId = arg.event.extendedProps.taskId;
@@ -231,81 +297,139 @@ export function CalendarBoard({ initialDate, items }: CalendarBoardProps) {
   }
 
   return (
-    <section className="calendar-shell">
-      <div className="calendar-toolbar">
-        <div className="calendar-title">
-          <CalendarDays size={20} />
-          <span>{title}</span>
-        </div>
-        <div className="calendar-controls">
-          <button className="icon-button" type="button" onClick={() => move("prev")} aria-label="Назад">
-            <ChevronLeft size={18} />
-          </button>
-          <button className="secondary-button" type="button" onClick={() => move("today")}>
-            Сегодня
-          </button>
-          <button className="icon-button" type="button" onClick={() => move("next")} aria-label="Вперед">
-            <ChevronRight size={18} />
-          </button>
-          <div className="segmented">
-            <button
-              className={view === "timeGridDay" ? "active" : ""}
-              type="button"
-              onClick={() => changeView("timeGridDay")}
-            >
-              Day
+    <div className="calendar-layout">
+      <section className="calendar-shell">
+        <div className="calendar-toolbar">
+          <div className="calendar-title">
+            <CalendarDays size={20} />
+            <span>{title}</span>
+          </div>
+          <div className="calendar-controls">
+            <button className="icon-button" type="button" onClick={() => move("prev")} aria-label="Назад">
+              <ChevronLeft size={18} />
             </button>
-            <button
-              className={view === "timeGridWeek" ? "active" : ""}
-              type="button"
-              onClick={() => changeView("timeGridWeek")}
-            >
-              Week
+            <button className="secondary-button" type="button" onClick={() => move("today")}>
+              Сегодня
             </button>
+            <button className="icon-button" type="button" onClick={() => move("next")} aria-label="Вперед">
+              <ChevronRight size={18} />
+            </button>
+            <div className="segmented">
+              <button
+                className={view === "timeGridDay" ? "active" : ""}
+                type="button"
+                onClick={() => changeView("timeGridDay")}
+              >
+                Day
+              </button>
+              <button
+                className={view === "timeGridWeek" ? "active" : ""}
+                type="button"
+                onClick={() => changeView("timeGridWeek")}
+              >
+                Week
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-      {isPending ? <div className="calendar-saving">Сохраняю расписание...</div> : null}
-      <FullCalendar
-        ref={calendarRef}
-        plugins={[timeGridPlugin, interactionPlugin]}
-        initialView={view}
-        initialDate={initialDate}
-        events={events}
-        datesSet={onDatesSet}
-        eventClick={onEventClick}
-        eventDrop={onEventDrop}
-        eventResize={onEventResize}
-        select={onSelect}
-        editable
-        droppable
-        selectable
-        selectMirror
-        eventResizableFromStart
-        allDayMaintainDuration={false}
-        allDaySlot
-        nowIndicator
-        height="auto"
-        slotMinTime="10:00:00"
-        slotMaxTime="23:00:00"
-        slotDuration="00:30:00"
-        defaultTimedEventDuration="01:00:00"
-        headerToolbar={false}
-        locale={ruLocale}
-        firstDay={1}
-        eventContent={(arg) => (
-          <div className="fc-event-inner-content">
-            <span className="fc-event-title-text">{arg.event.title}</span>
-            {arg.event.extendedProps.kind === "calendar-event" &&
-            arg.event.extendedProps.sourceLabel ? (
-              <span className="fc-event-source">
-                {arg.event.extendedProps.sourceLabel}
-              </span>
-            ) : null}
-            {arg.event.extendedProps.eventUrl ? <ExternalLink size={12} /> : null}
+        {isPending ? <div className="calendar-saving">Сохраняю расписание...</div> : null}
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[timeGridPlugin, interactionPlugin]}
+          initialView={view}
+          initialDate={initialDate}
+          events={events}
+          datesSet={onDatesSet}
+          eventClick={onEventClick}
+          eventDrop={onEventDrop}
+          eventReceive={onEventReceive}
+          eventResize={onEventResize}
+          select={onSelect}
+          editable
+          droppable
+          selectable
+          selectMirror
+          eventResizableFromStart
+          allDayMaintainDuration={false}
+          allDaySlot
+          nowIndicator
+          height="auto"
+          slotMinTime="10:00:00"
+          slotMaxTime="23:00:00"
+          slotDuration="00:30:00"
+          defaultTimedEventDuration="01:00:00"
+          headerToolbar={false}
+          locale={ruLocale}
+          firstDay={1}
+          eventContent={(arg) => (
+            <div className="fc-event-inner-content">
+              <span className="fc-event-title-text">{arg.event.title}</span>
+              {arg.event.extendedProps.kind === "calendar-event" &&
+              arg.event.extendedProps.sourceLabel ? (
+                <span className="fc-event-source">
+                  {arg.event.extendedProps.sourceLabel}
+                </span>
+              ) : null}
+              {arg.event.extendedProps.eventUrl ? <ExternalLink size={12} /> : null}
+            </div>
+          )}
+        />
+      </section>
+
+      <aside className="panel calendar-backlog">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Без даты</p>
+            <h2>Бэклог</h2>
           </div>
-        )}
-      />
-    </section>
+          <Inbox size={20} />
+        </div>
+        <p className="muted calendar-backlog-hint">
+          Перетащите задачу в календарь, чтобы запланировать её.
+        </p>
+        <div className="task-list" ref={backlogRef}>
+          {backlogTasks.length === 0 ? (
+            <p className="empty-state">Все задачи распланированы.</p>
+          ) : null}
+          {backlogTasks.map((task) => {
+            const color = task.projectColor ?? task.streamColor ?? "#2d7dd2";
+
+            return (
+              <div
+                className="calendar-backlog-item"
+                data-color={color}
+                data-duration-minutes={getTaskSizeDurationMinutes(task.size)}
+                data-task-id={task.id}
+                data-task-size={task.size}
+                data-title={task.title}
+                key={task.id}
+                onClick={() => router.push(`/calendar?taskId=${task.id}`)}
+              >
+                <span className="task-title">{task.title}</span>
+                <span className="label-row">
+                  {task.projectName ? (
+                    <span
+                      className="label"
+                      style={{ "--label-color": task.projectColor ?? "#77736a" } as CSSProperties}
+                    >
+                      {task.projectName}
+                    </span>
+                  ) : null}
+                  {task.streamName ? (
+                    <span
+                      className="label"
+                      style={{ "--label-color": task.streamColor ?? "#77736a" } as CSSProperties}
+                    >
+                      {task.streamName}
+                    </span>
+                  ) : null}
+                  <span className="muted">{taskSizeLabels[task.size]}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
+    </div>
   );
 }
