@@ -3,6 +3,8 @@
 import FullCalendar from "@fullcalendar/react";
 import interactionPlugin, {
   Draggable,
+  type EventDragStartArg,
+  type EventDragStopArg,
   type EventReceiveArg,
   type EventResizeDoneArg
 } from "@fullcalendar/interaction";
@@ -19,7 +21,7 @@ import type { CSSProperties } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, Inbox } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { scheduleTaskFromCalendar } from "@/app/actions/tasks";
+import { moveTaskToBacklog, scheduleTaskFromCalendar } from "@/app/actions/tasks";
 import type { CalendarItem } from "@/lib/calendar/data";
 import { formatDisplayDate } from "@/lib/date";
 import type { TaskRow } from "@/lib/tasks/data";
@@ -36,6 +38,18 @@ type CalendarBoardProps = {
 };
 
 type CalendarView = "timeGridDay" | "timeGridWeek";
+
+type DragSource = "none" | "backlog" | "calendar";
+
+function isInsideRect(rect: DOMRect | undefined, x: number, y: number) {
+  return (
+    rect !== undefined &&
+    x >= rect.left &&
+    x <= rect.right &&
+    y >= rect.top &&
+    y <= rect.bottom
+  );
+}
 
 function addMinutes(date: Date, minutes: number) {
   const result = new Date(date);
@@ -99,9 +113,31 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
   const router = useRouter();
   const calendarRef = useRef<FullCalendar | null>(null);
   const backlogRef = useRef<HTMLDivElement | null>(null);
+  const backlogPanelRef = useRef<HTMLElement | null>(null);
   const [view, setView] = useState<CalendarView>("timeGridWeek");
   const [title, setTitle] = useState("");
+  const [dragSource, setDragSource] = useState<DragSource>("none");
+  const [isBacklogHovered, setIsBacklogHovered] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (dragSource !== "calendar") {
+      return;
+    }
+
+    function onMouseMove(event: MouseEvent) {
+      setIsBacklogHovered(
+        isInsideRect(
+          backlogPanelRef.current?.getBoundingClientRect(),
+          event.clientX,
+          event.clientY
+        )
+      );
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    return () => document.removeEventListener("mousemove", onMouseMove);
+  }, [dragSource]);
 
   useEffect(() => {
     if (!backlogRef.current) {
@@ -253,6 +289,68 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
     scheduleChangedTask(arg.event, false, arg.revert);
   }
 
+  function onBacklogItemPointerDown(event: React.PointerEvent) {
+    const startX = event.clientX;
+    const startY = event.clientY;
+
+    function onPointerMove(moveEvent: PointerEvent) {
+      if (
+        Math.abs(moveEvent.clientX - startX) +
+          Math.abs(moveEvent.clientY - startY) >
+        6
+      ) {
+        setDragSource("backlog");
+      }
+    }
+
+    function onPointerUp() {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      setDragSource("none");
+    }
+
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  }
+
+  function onEventDragStart(arg: EventDragStartArg) {
+    if (arg.event.extendedProps.kind === "task") {
+      setDragSource("calendar");
+    }
+  }
+
+  function onEventDragStop(arg: EventDragStopArg) {
+    setDragSource("none");
+    setIsBacklogHovered(false);
+
+    const taskId = arg.event.extendedProps.taskId;
+    const droppedOnBacklog = isInsideRect(
+      backlogPanelRef.current?.getBoundingClientRect(),
+      arg.jsEvent.clientX,
+      arg.jsEvent.clientY
+    );
+
+    if (
+      arg.event.extendedProps.kind !== "task" ||
+      typeof taskId !== "string" ||
+      !droppedOnBacklog
+    ) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("taskId", taskId);
+    arg.event.remove();
+
+    startTransition(async () => {
+      try {
+        await moveTaskToBacklog(formData);
+      } finally {
+        router.refresh();
+      }
+    });
+  }
+
   function onEventReceive(arg: EventReceiveArg) {
     const taskId = arg.event.extendedProps.taskId;
 
@@ -298,7 +396,13 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
 
   return (
     <div className="calendar-layout">
-      <section className="calendar-shell">
+      <section
+        className={
+          dragSource === "backlog"
+            ? "calendar-shell day-drop-hint"
+            : "calendar-shell"
+        }
+      >
         <div className="calendar-toolbar">
           <div className="calendar-title">
             <CalendarDays size={20} />
@@ -333,6 +437,13 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
           </div>
         </div>
         {isPending ? <div className="calendar-saving">Сохраняю расписание...</div> : null}
+        {dragSource === "backlog" ? (
+          <div className="calendar-drop-banner">
+            <CalendarDays size={15} />
+            Бросьте на строку «Весь день», чтобы запланировать задачу на день
+            без конкретного времени
+          </div>
+        ) : null}
         <FullCalendar
           ref={calendarRef}
           plugins={[timeGridPlugin, interactionPlugin]}
@@ -341,6 +452,8 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
           events={events}
           datesSet={onDatesSet}
           eventClick={onEventClick}
+          eventDragStart={onEventDragStart}
+          eventDragStop={onEventDragStop}
           eventDrop={onEventDrop}
           eventReceive={onEventReceive}
           eventResize={onEventResize}
@@ -376,7 +489,16 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
         />
       </section>
 
-      <aside className="panel calendar-backlog">
+      <aside
+        className={[
+          "panel calendar-backlog",
+          dragSource === "calendar" ? "drop-target" : "",
+          isBacklogHovered ? "drop-hover" : ""
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        ref={backlogPanelRef}
+      >
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Без даты</p>
@@ -385,8 +507,15 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
           <Inbox size={20} />
         </div>
         <p className="muted calendar-backlog-hint">
-          Перетащите задачу в календарь, чтобы запланировать её.
+          Перетащите задачу в календарь, чтобы запланировать её, или верните
+          задачу из календаря сюда.
         </p>
+        {dragSource === "calendar" ? (
+          <div className="backlog-drop-overlay">
+            <Inbox size={22} />
+            Отпустите, чтобы убрать дату
+          </div>
+        ) : null}
         <div className="task-list" ref={backlogRef}>
           {backlogTasks.length === 0 ? (
             <p className="empty-state">Все задачи распланированы.</p>
@@ -404,6 +533,7 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
                 data-title={task.title}
                 key={task.id}
                 onClick={() => router.push(`/calendar?taskId=${task.id}`)}
+                onPointerDown={onBacklogItemPointerDown}
               >
                 <span className="task-title">{task.title}</span>
                 <span className="label-row">

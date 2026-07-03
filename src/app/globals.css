@@ -1511,6 +1511,96 @@ a {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 
+.calendar-shell .fc-daygrid-day-frame {
+  min-height: 44px;
+}
+
+.calendar-shell .fc-daygrid-day-events {
+  margin: 4px 3px;
+}
+
+.calendar-shell .fc-daygrid-event {
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.calendar-shell .fc-timegrid-axis-cushion {
+  font-size: 12px;
+}
+
+.calendar-shell .fc-highlight {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* absolute overlay: inserting it must not shift the grid, otherwise
+   FullCalendar's cached drop hit-boxes go stale mid-drag */
+.calendar-drop-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  color: var(--accent);
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  justify-content: center;
+  left: 0;
+  min-height: 54px;
+  padding: 8px 18px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 30;
+}
+
+.day-drop-hint .fc-daygrid-day {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.day-drop-hint .fc-daygrid-day-frame {
+  border-radius: 8px;
+  outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -4px;
+}
+
+.day-drop-hint .fc-timegrid-axis-cushion {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.calendar-backlog {
+  position: relative;
+}
+
+.calendar-backlog.drop-target {
+  border: 1px dashed color-mix(in srgb, var(--accent) 62%, var(--line));
+}
+
+.backlog-drop-overlay {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  backdrop-filter: blur(1.5px);
+  border-radius: 8px;
+  color: var(--accent);
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  gap: 8px;
+  inset: 0;
+  justify-content: center;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  z-index: 5;
+}
+
+.calendar-backlog.drop-hover {
+  border-color: var(--accent);
+}
+
+.calendar-backlog.drop-hover .backlog-drop-overlay {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+
 .stream-grid {
   align-items: start;
   display: grid;

@@ -295,6 +295,33 @@ export async function moveTaskToToday(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function moveTaskToBacklog(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const dayPriority = await getNextDayPriority(db, userId, null);
+
+    await db
+      .update(tasks)
+      .set({
+        dueDate: null,
+        dayPriority,
+        timeBlockStart: null,
+        timeBlockEnd: null,
+        updatedAt: new Date()
+      })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
+}
+
 export async function scheduleTaskFromCalendar(formData: FormData) {
   const taskId = getString(formData, "taskId");
   const isAllDay = getString(formData, "isAllDay") === "true";
