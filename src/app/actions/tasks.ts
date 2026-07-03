@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { projects, streams, tasks } from "@/db/schema";
 import { getNextContextColor } from "@/lib/context/colors";
 import {
@@ -49,6 +49,42 @@ function getReturnTo(formData: FormData) {
 function getDueDate(formData: FormData) {
   const value = getString(formData, "dueDate");
   return value ? parseDateInputValue(value) : null;
+}
+
+function getTaskIds(formData: FormData, name: string) {
+  const value = getString(formData, name);
+
+  if (!value) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(value);
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${name} must be an array`);
+  }
+
+  return [...new Set(parsed.filter((item): item is string => typeof item === "string"))];
+}
+
+function getTodayBoardDestination(formData: FormData) {
+  const value = getString(formData, "destination");
+
+  if (value === "today" || value === "backlog" || value === "week") {
+    return value;
+  }
+
+  throw new Error("Invalid task board destination");
+}
+
+function ensureId(ids: string[], id: string) {
+  return ids.includes(id) ? ids : [...ids, id];
+}
+
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return formatDateInput(date);
 }
 
 async function resolveTaskContext(
@@ -293,6 +329,7 @@ export async function moveTaskToToday(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/calendar");
 }
 
 export async function moveTaskToBacklog(formData: FormData) {
@@ -316,6 +353,151 @@ export async function moveTaskToBacklog(formData: FormData) {
         updatedAt: new Date()
       })
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
+}
+
+export async function toggleTaskDone(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.userId, userId))
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    await db
+      .update(tasks)
+      .set({
+        status: task.status === "done" ? "open" : "done",
+        updatedAt: new Date()
+      })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
+}
+
+export async function moveTaskOnTodayBoard(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+  const destination = getTodayBoardDestination(formData);
+  let todayTaskIds = getTaskIds(formData, "todayTaskIds");
+  let backlogTaskIds = getTaskIds(formData, "backlogTaskIds");
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  if (destination === "today") {
+    todayTaskIds = ensureId(todayTaskIds, taskId);
+  } else if (destination === "backlog") {
+    backlogTaskIds = ensureId(backlogTaskIds, taskId);
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const today = formatDateInput();
+    const tomorrow = addDays(today, 1);
+
+    await db.transaction(async (tx) => {
+      const [task] = await tx
+        .select({ dueDate: tasks.dueDate })
+        .from(tasks)
+        .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
+        .limit(1);
+
+      if (!task) {
+        throw new Error("Task not found");
+      }
+
+      const previousDueDate = task.dueDate;
+
+      const [latestTomorrowTask] = await tx
+        .select({ dayPriority: tasks.dayPriority })
+        .from(tasks)
+        .where(and(eq(tasks.userId, userId), eq(tasks.dueDate, tomorrow)))
+        .orderBy(desc(tasks.dayPriority))
+        .limit(1);
+      const nextTomorrowPriority = (latestTomorrowTask?.dayPriority ?? 0) + 1;
+
+      if (destination === "today" && previousDueDate !== today) {
+        await tx
+          .update(tasks)
+          .set({
+            dueDate: today,
+            timeBlockStart: null,
+            timeBlockEnd: null,
+            updatedAt: new Date()
+          })
+          .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      }
+
+      if (destination === "week" && previousDueDate !== tomorrow) {
+        await tx
+          .update(tasks)
+          .set({
+            dueDate: tomorrow,
+            dayPriority: nextTomorrowPriority,
+            timeBlockStart: null,
+            timeBlockEnd: null,
+            updatedAt: new Date()
+          })
+          .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      }
+
+      if (destination === "backlog" && previousDueDate !== null) {
+        await tx
+          .update(tasks)
+          .set({
+            dueDate: null,
+            timeBlockStart: null,
+            timeBlockEnd: null,
+            updatedAt: new Date()
+          })
+          .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+      }
+
+      if (destination === "today" || previousDueDate === today) {
+        for (const [index, id] of todayTaskIds.entries()) {
+          await tx
+            .update(tasks)
+            .set({ dayPriority: index + 1, updatedAt: new Date() })
+            .where(
+              and(
+                eq(tasks.id, id),
+                eq(tasks.userId, userId),
+                eq(tasks.dueDate, today)
+              )
+            );
+        }
+      }
+
+      if (destination === "backlog" || previousDueDate === null) {
+        for (const [index, id] of backlogTaskIds.entries()) {
+          await tx
+            .update(tasks)
+            .set({ dayPriority: index + 1, updatedAt: new Date() })
+            .where(
+              and(
+                eq(tasks.id, id),
+                eq(tasks.userId, userId),
+                isNull(tasks.dueDate)
+              )
+            );
+        }
+      }
+    });
   });
 
   revalidatePath("/");

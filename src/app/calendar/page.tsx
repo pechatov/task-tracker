@@ -73,6 +73,7 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
         backlogTasks={data.backlogTasks}
         initialDate={data.today}
         items={data.items}
+        overdueTasks={data.overdueTasks}
       />
 
       {data.selectedTask ? (

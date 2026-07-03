@@ -18,7 +18,14 @@ import type {
   DateSelectArg
 } from "@fullcalendar/core";
 import type { CSSProperties } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, Inbox } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Inbox
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { moveTaskToBacklog, scheduleTaskFromCalendar } from "@/app/actions/tasks";
@@ -35,11 +42,14 @@ type CalendarBoardProps = {
   backlogTasks: TaskRow[];
   initialDate: string;
   items: CalendarItem[];
+  overdueTasks: TaskRow[];
 };
 
 type CalendarView = "timeGridDay" | "timeGridWeek";
 
 type DragSource = "none" | "backlog" | "calendar";
+
+type TaskStatusFilter = "all" | "open" | "done";
 
 function isInsideRect(rect: DOMRect | undefined, x: number, y: number) {
   return (
@@ -109,16 +119,32 @@ function getTaskScheduleFormData(
   return formData;
 }
 
-export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoardProps) {
+export function CalendarBoard({
+  backlogTasks,
+  initialDate,
+  items,
+  overdueTasks
+}: CalendarBoardProps) {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar | null>(null);
-  const backlogRef = useRef<HTMLDivElement | null>(null);
+  const taskSourceRef = useRef<HTMLElement | null>(null);
   const backlogPanelRef = useRef<HTMLElement | null>(null);
+  const returningTaskTimerRef = useRef<number | null>(null);
   const [view, setView] = useState<CalendarView>("timeGridWeek");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatusFilter>("all");
   const [title, setTitle] = useState("");
   const [dragSource, setDragSource] = useState<DragSource>("none");
   const [isBacklogHovered, setIsBacklogHovered] = useState(false);
+  const [returningTaskTitle, setReturningTaskTitle] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    return () => {
+      if (returningTaskTimerRef.current !== null) {
+        window.clearTimeout(returningTaskTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (dragSource !== "calendar") {
@@ -140,11 +166,11 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
   }, [dragSource]);
 
   useEffect(() => {
-    if (!backlogRef.current) {
+    if (!taskSourceRef.current) {
       return;
     }
 
-    const draggable = new Draggable(backlogRef.current, {
+    const draggable = new Draggable(taskSourceRef.current, {
       itemSelector: ".calendar-backlog-item",
       eventData: (element) => ({
         title: element.dataset.title ?? "",
@@ -158,7 +184,8 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
         extendedProps: {
           kind: "task",
           taskId: element.dataset.taskId,
-          taskSize: element.dataset.taskSize
+          taskSize: element.dataset.taskSize,
+          taskStatus: "open"
         }
       })
     });
@@ -168,30 +195,46 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
 
   const events = useMemo<EventInput[]>(
     () =>
-      items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        start: item.start,
-        end: item.end ?? undefined,
-        allDay: item.allDay,
-        editable: item.editable,
-        durationEditable: item.kind === "task",
-        startEditable: item.kind === "task",
-        backgroundColor: item.kind === "task" ? item.color : "#ffffff",
-        borderColor: item.color,
-        classNames: [
-          item.kind === "task" ? "calendar-task-event" : "calendar-meeting-event"
-        ],
-        textColor: item.kind === "task" ? "#ffffff" : "#24231f",
-        extendedProps: {
-          kind: item.kind,
-          taskId: item.taskId,
-          taskSize: item.taskSize,
-          eventUrl: item.eventUrl,
-          sourceLabel: item.sourceLabel
-        }
-      })),
-    [items]
+      items
+        .filter((item) => {
+          if (item.kind !== "task" || taskStatusFilter === "all") {
+            return true;
+          }
+
+          return item.taskStatus === taskStatusFilter;
+        })
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          start: item.start,
+          end: item.end ?? undefined,
+          allDay: item.allDay,
+          editable: item.editable,
+          durationEditable: item.kind === "task",
+          startEditable: item.kind === "task",
+          backgroundColor: item.kind === "task" ? item.color : "#ffffff",
+          borderColor: item.color,
+          classNames: [
+            item.kind === "task" ? "calendar-task-event" : "calendar-meeting-event",
+            item.kind === "task" && item.taskStatus === "done"
+              ? "calendar-task-event-done"
+              : ""
+          ].filter(Boolean),
+          textColor: item.kind === "task" ? "#ffffff" : "#24231f",
+          extendedProps: {
+            kind: item.kind,
+            taskId: item.taskId,
+            taskSize: item.taskSize,
+            taskStatus: item.taskStatus,
+            taskProjectName: item.taskProjectName,
+            taskProjectColor: item.taskProjectColor,
+            taskStreamName: item.taskStreamName,
+            taskStreamColor: item.taskStreamColor,
+            eventUrl: item.eventUrl,
+            sourceLabel: item.sourceLabel
+          }
+        })),
+    [items, taskStatusFilter]
   );
 
   function getCalendarApi() {
@@ -289,7 +332,7 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
     scheduleChangedTask(arg.event, false, arg.revert);
   }
 
-  function onBacklogItemPointerDown(event: React.PointerEvent) {
+  function onCalendarTaskPointerDown(event: React.PointerEvent) {
     const startX = event.clientX;
     const startY = event.clientY;
 
@@ -340,7 +383,17 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
 
     const formData = new FormData();
     formData.set("taskId", taskId);
+    setReturningTaskTitle(arg.event.title);
     arg.event.remove();
+
+    if (returningTaskTimerRef.current !== null) {
+      window.clearTimeout(returningTaskTimerRef.current);
+    }
+
+    returningTaskTimerRef.current = window.setTimeout(() => {
+      setReturningTaskTitle(null);
+      returningTaskTimerRef.current = null;
+    }, 900);
 
     startTransition(async () => {
       try {
@@ -394,11 +447,56 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
     }
   }
 
+  function renderDraggableTask(
+    task: TaskRow,
+    options: { showDueDate?: boolean } = {}
+  ) {
+    const color = task.projectColor ?? task.streamColor ?? "#2d7dd2";
+
+    return (
+      <div
+        className="calendar-backlog-item"
+        data-color={color}
+        data-duration-minutes={getTaskSizeDurationMinutes(task.size)}
+        data-task-id={task.id}
+        data-task-size={task.size}
+        data-title={task.title}
+        key={task.id}
+        onClick={() => router.push(`/calendar?taskId=${task.id}`)}
+        onPointerDown={onCalendarTaskPointerDown}
+      >
+        <span className="task-title">{task.title}</span>
+        <span className="label-row">
+          {task.projectName ? (
+            <span
+              className="label"
+              style={{ "--label-color": task.projectColor ?? "#77736a" } as CSSProperties}
+            >
+              {task.projectName}
+            </span>
+          ) : null}
+          {task.streamName ? (
+            <span
+              className="label"
+              style={{ "--label-color": task.streamColor ?? "#77736a" } as CSSProperties}
+            >
+              {task.streamName}
+            </span>
+          ) : null}
+          <span className="muted">{taskSizeLabels[task.size]}</span>
+          {options.showDueDate && task.dueDate ? (
+            <span className="date-chip overdue">{formatDisplayDate(task.dueDate)}</span>
+          ) : null}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="calendar-layout">
       <section
         className={
-          dragSource === "backlog"
+          dragSource !== "none"
             ? "calendar-shell day-drop-hint"
             : "calendar-shell"
         }
@@ -434,14 +532,38 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
                 Week
               </button>
             </div>
+            <div className="segmented calendar-task-filter">
+              <button
+                className={taskStatusFilter === "all" ? "active" : ""}
+                type="button"
+                onClick={() => setTaskStatusFilter("all")}
+              >
+                Все задачи
+              </button>
+              <button
+                className={taskStatusFilter === "open" ? "active" : ""}
+                type="button"
+                onClick={() => setTaskStatusFilter("open")}
+              >
+                Невыполненные
+              </button>
+              <button
+                className={taskStatusFilter === "done" ? "active" : ""}
+                type="button"
+                onClick={() => setTaskStatusFilter("done")}
+              >
+                Выполненные
+              </button>
+            </div>
           </div>
         </div>
         {isPending ? <div className="calendar-saving">Сохраняю расписание...</div> : null}
-        {dragSource === "backlog" ? (
+        {dragSource !== "none" ? (
           <div className="calendar-drop-banner">
             <CalendarDays size={15} />
-            Бросьте на строку «Весь день», чтобы запланировать задачу на день
-            без конкретного времени
+            {dragSource === "calendar"
+              ? "Бросьте в строку «Весь день», чтобы оставить дату без временного слота"
+              : "Бросьте на строку «Весь день», чтобы запланировать задачу на день без конкретного времени"}
           </div>
         ) : null}
         <FullCalendar
@@ -474,91 +596,123 @@ export function CalendarBoard({ backlogTasks, initialDate, items }: CalendarBoar
           headerToolbar={false}
           locale={ruLocale}
           firstDay={1}
-          eventContent={(arg) => (
-            <div className="fc-event-inner-content">
-              <span className="fc-event-title-text">{arg.event.title}</span>
-              {arg.event.extendedProps.kind === "calendar-event" &&
-              arg.event.extendedProps.sourceLabel ? (
-                <span className="fc-event-source">
-                  {arg.event.extendedProps.sourceLabel}
-                </span>
-              ) : null}
-              {arg.event.extendedProps.eventUrl ? <ExternalLink size={12} /> : null}
-            </div>
-          )}
+          eventContent={(arg) => {
+            const props = arg.event.extendedProps;
+            const projectName =
+              typeof props.taskProjectName === "string"
+                ? props.taskProjectName
+                : null;
+            const projectColor =
+              typeof props.taskProjectColor === "string"
+                ? props.taskProjectColor
+                : "#77736a";
+            const streamName =
+              typeof props.taskStreamName === "string"
+                ? props.taskStreamName
+                : null;
+            const streamColor =
+              typeof props.taskStreamColor === "string"
+                ? props.taskStreamColor
+                : "#77736a";
+
+            return (
+              <div className="fc-event-inner-content">
+                <span className="fc-event-title-text">{arg.event.title}</span>
+                {props.kind === "task" && (projectName || streamName) ? (
+                  <span className="label-row calendar-event-labels">
+                    {projectName ? (
+                      <span
+                        className="label"
+                        style={{ "--label-color": projectColor } as CSSProperties}
+                      >
+                        {projectName}
+                      </span>
+                    ) : null}
+                    {streamName ? (
+                      <span
+                        className="label"
+                        style={{ "--label-color": streamColor } as CSSProperties}
+                      >
+                        {streamName}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+                {props.kind === "calendar-event" && props.sourceLabel ? (
+                  <span className="fc-event-source">
+                    {props.sourceLabel}
+                  </span>
+                ) : null}
+                {props.eventUrl ? <ExternalLink size={12} /> : null}
+              </div>
+            );
+          }}
         />
       </section>
 
-      <aside
-        className={[
-          "panel calendar-backlog",
-          dragSource === "calendar" ? "drop-target" : "",
-          isBacklogHovered ? "drop-hover" : ""
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        ref={backlogPanelRef}
-      >
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Без даты</p>
-            <h2>Бэклог</h2>
+      <aside className="calendar-sidebar" ref={taskSourceRef}>
+        <section
+          className={[
+            "panel calendar-backlog",
+            dragSource === "calendar" ? "drop-target" : "",
+            isBacklogHovered ? "drop-hover" : "",
+            returningTaskTitle ? "is-receiving" : ""
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          ref={backlogPanelRef}
+        >
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Без даты</p>
+              <h2>Бэклог</h2>
+            </div>
+            <Inbox size={20} />
           </div>
-          <Inbox size={20} />
-        </div>
-        <p className="muted calendar-backlog-hint">
-          Перетащите задачу в календарь, чтобы запланировать её, или верните
-          задачу из календаря сюда.
-        </p>
-        {dragSource === "calendar" ? (
-          <div className="backlog-drop-overlay">
-            <Inbox size={22} />
-            Отпустите, чтобы убрать дату
-          </div>
-        ) : null}
-        <div className="task-list" ref={backlogRef}>
-          {backlogTasks.length === 0 ? (
-            <p className="empty-state">Все задачи распланированы.</p>
+          <p className="muted calendar-backlog-hint">
+            Перетащите задачу в календарь, чтобы запланировать её, или верните
+            задачу из календаря сюда.
+          </p>
+          {dragSource === "calendar" ? (
+            <div className="backlog-drop-overlay">
+              <Inbox size={22} />
+              Отпустите, чтобы убрать дату
+            </div>
           ) : null}
-          {backlogTasks.map((task) => {
-            const color = task.projectColor ?? task.streamColor ?? "#2d7dd2";
+          {returningTaskTitle ? (
+            <div className="backlog-return-ghost">
+              <Inbox size={16} />
+              <span>{returningTaskTitle}</span>
+            </div>
+          ) : null}
+          <div className="task-list">
+            {backlogTasks.length === 0 ? (
+              <p className="empty-state">Все задачи распланированы.</p>
+            ) : null}
+            {backlogTasks.map((task) => renderDraggableTask(task))}
+          </div>
+        </section>
 
-            return (
-              <div
-                className="calendar-backlog-item"
-                data-color={color}
-                data-duration-minutes={getTaskSizeDurationMinutes(task.size)}
-                data-task-id={task.id}
-                data-task-size={task.size}
-                data-title={task.title}
-                key={task.id}
-                onClick={() => router.push(`/calendar?taskId=${task.id}`)}
-                onPointerDown={onBacklogItemPointerDown}
-              >
-                <span className="task-title">{task.title}</span>
-                <span className="label-row">
-                  {task.projectName ? (
-                    <span
-                      className="label"
-                      style={{ "--label-color": task.projectColor ?? "#77736a" } as CSSProperties}
-                    >
-                      {task.projectName}
-                    </span>
-                  ) : null}
-                  {task.streamName ? (
-                    <span
-                      className="label"
-                      style={{ "--label-color": task.streamColor ?? "#77736a" } as CSSProperties}
-                    >
-                      {task.streamName}
-                    </span>
-                  ) : null}
-                  <span className="muted">{taskSizeLabels[task.size]}</span>
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        <section className="panel calendar-overdue-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Прошлые недели</p>
+              <h2>Просроченные задачи</h2>
+            </div>
+            <AlertTriangle size={20} />
+          </div>
+          <p className="muted calendar-backlog-hint">
+            Перетащите задачу в календарь, чтобы назначить новую дату.
+          </p>
+          <div className="task-list">
+            {overdueTasks.length === 0 ? (
+              <p className="empty-state">Нет задач из прошлых недель.</p>
+            ) : null}
+            {overdueTasks.map((task) =>
+              renderDraggableTask(task, { showDueDate: true })
+            )}
+          </div>
+        </section>
       </aside>
     </div>
   );

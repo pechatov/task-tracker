@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 import { withDb } from "@/db/with-db";
 import {
   calendarEvents,
@@ -12,6 +12,7 @@ import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { formatDateInput } from "@/lib/date";
 import type { ProjectOption, StreamOption, TaskRow } from "@/lib/tasks/data";
 import { getTaskSizeDurationMinutes, type TaskSize } from "@/lib/tasks/size";
+import type { TaskStatus } from "@/lib/tasks/status";
 
 export type CalendarItem = {
   id: string;
@@ -24,6 +25,11 @@ export type CalendarItem = {
   color: string;
   taskId: string | null;
   taskSize: TaskSize | null;
+  taskStatus: TaskStatus | null;
+  taskProjectName: string | null;
+  taskProjectColor: string | null;
+  taskStreamName: string | null;
+  taskStreamColor: string | null;
   eventUrl: string | null;
   sourceLabel: string | null;
 };
@@ -32,6 +38,7 @@ export type CalendarData = {
   today: string;
   items: CalendarItem[];
   backlogTasks: TaskRow[];
+  overdueTasks: TaskRow[];
   projects: ProjectOption[];
   selectedTask: TaskRow | null;
   streams: StreamOption[];
@@ -41,6 +48,14 @@ function addDays(date: string, days: number) {
   const result = new Date(`${date}T00:00:00.000Z`);
   result.setUTCDate(result.getUTCDate() + days);
   return formatDateInput(result);
+}
+
+function getCurrentWeekStart(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  const day = date.getDay();
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  date.setDate(date.getDate() - daysFromMonday);
+  return formatDateInput(date);
 }
 
 function getTaskSizeEnd(startsAt: Date, size: TaskSize) {
@@ -65,6 +80,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
   return withDb(async (db) => {
     const userId = await requireCurrentUserId(db);
     const today = formatDateInput();
+    const weekStart = getCurrentWeekStart(today);
     const syncWindow = getCalendarSyncWindow(new Date());
     const windowStart = formatDateInput(syncWindow.startsAt);
     const windowEnd = formatDateInput(syncWindow.endsAt);
@@ -124,7 +140,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       .where(
         and(
           eq(tasks.userId, userId),
-          eq(tasks.status, "open"),
+          inArray(tasks.status, ["open", "done"]),
           gte(tasks.dueDate, windowStart),
           lte(tasks.dueDate, windowEnd)
         )
@@ -144,6 +160,20 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
         )
       )
       .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt));
+
+    const overdueTasks = await db
+      .select(taskSelect)
+      .from(tasks)
+      .leftJoin(streams, eq(tasks.streamId, streams.id))
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, "open"),
+          lt(tasks.dueDate, weekStart)
+        )
+      )
+      .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
 
     const eventRows = await db
       .select({
@@ -184,14 +214,12 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
 
     const taskItems: CalendarItem[] = taskRows.flatMap((task) => {
       const color = task.projectColor ?? task.streamColor ?? "#2d7dd2";
-      const label = task.projectName ?? task.streamName;
-      const title = label ? `${task.title} · ${label}` : task.title;
 
       if (task.timeBlockStart) {
         return {
           id: `task-${task.id}`,
           kind: "task" as const,
-          title,
+          title: task.title,
           start: task.timeBlockStart.toISOString(),
           end: (task.timeBlockEnd ?? getTaskSizeEnd(task.timeBlockStart, task.size)).toISOString(),
           allDay: false,
@@ -199,8 +227,13 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           color,
           taskId: task.id,
           taskSize: task.size,
+          taskStatus: task.status,
+          taskProjectName: task.projectName,
+          taskProjectColor: task.projectColor,
+          taskStreamName: task.streamName,
+          taskStreamColor: task.streamColor,
           eventUrl: null,
-          sourceLabel: label
+          sourceLabel: null
         };
       }
 
@@ -211,7 +244,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       return {
         id: `task-${task.id}`,
         kind: "task" as const,
-        title,
+        title: task.title,
         start: task.dueDate,
         end: addDays(task.dueDate, 1),
         allDay: true,
@@ -219,8 +252,13 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
         color,
         taskId: task.id,
         taskSize: task.size,
+        taskStatus: task.status,
+        taskProjectName: task.projectName,
+        taskProjectColor: task.projectColor,
+        taskStreamName: task.streamName,
+        taskStreamColor: task.streamColor,
         eventUrl: null,
-        sourceLabel: label
+        sourceLabel: null
       };
     });
 
@@ -235,6 +273,11 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       color: event.calendarColor,
       taskId: null,
       taskSize: null,
+      taskStatus: null,
+      taskProjectName: null,
+      taskProjectColor: null,
+      taskStreamName: null,
+      taskStreamColor: null,
       eventUrl: getEventUrl(event),
       sourceLabel: event.calendarName
     }));
@@ -243,6 +286,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       today,
       items: [...taskItems, ...calendarItems],
       backlogTasks,
+      overdueTasks,
       projects: activeProjects,
       selectedTask: selectedTask[0] ?? null,
       streams: activeStreams
