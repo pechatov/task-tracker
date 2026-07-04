@@ -45,6 +45,7 @@ export type TaskRow = {
   projectId: string | null;
   projectName: string | null;
   projectColor: string | null;
+  recurringTaskId: string | null;
   timeBlockStart: Date | null;
   timeBlockEnd: Date | null;
 };
@@ -162,6 +163,7 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       projectId: tasks.projectId,
       projectName: projects.name,
       projectColor: projects.color,
+      recurringTaskId: tasks.recurringTaskId,
       timeBlockStart: tasks.timeBlockStart,
       timeBlockEnd: tasks.timeBlockEnd
     };

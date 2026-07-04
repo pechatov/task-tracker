@@ -652,6 +652,26 @@ a {
   white-space: nowrap;
 }
 
+.task-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-title-recurring-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 18px;
+  justify-content: center;
+  width: 18px;
+}
+
 .label-row {
   align-items: center;
   display: flex;
@@ -1147,6 +1167,28 @@ a {
   color: var(--muted);
   flex: 0 0 auto;
   font-size: 11px;
+}
+
+.fc-event-title-row {
+  align-items: flex-start;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+
+.calendar-recurring-badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--text-on-primary) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-on-primary) 30%, transparent);
+  border-radius: 999px;
+  color: inherit;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 17px;
+  justify-content: center;
+  margin-top: 1px;
+  width: 17px;
 }
 
 .fc-event-inner-content span {
