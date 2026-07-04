@@ -348,6 +348,12 @@ a {
   padding: 34px 36px 64px;
 }
 
+.calendar-page {
+  max-width: 1680px;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
 .page-header {
   align-items: center;
   display: flex;
@@ -1027,6 +1033,10 @@ a {
   font-family: inherit;
 }
 
+.calendar-scroll-area {
+  min-width: 0;
+}
+
 .calendar-shell .fc-theme-standard td,
 .calendar-shell .fc-theme-standard th,
 .calendar-shell .fc-scrollgrid {
@@ -1128,16 +1138,26 @@ a {
 }
 
 .calendar-event-labels {
+  box-sizing: border-box;
+  flex: 0 1 auto;
   gap: 4px;
   max-width: 100%;
+  min-width: 0;
   overflow: visible;
   white-space: normal;
+  width: 100%;
 }
 
 .calendar-event-labels .label {
+  align-items: center;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 1 auto;
   font-size: 11px;
+  height: 20px;
   line-height: 1;
   max-width: 100%;
+  min-width: 0;
   min-height: 20px;
   overflow: hidden;
   padding: 0 6px;
@@ -1720,12 +1740,13 @@ a {
   align-items: start;
   display: grid;
   gap: 22px;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(760px, 1fr) minmax(240px, 280px);
 }
 
 .calendar-sidebar {
   display: grid;
   gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -1761,6 +1782,17 @@ a {
 .calendar-shell .fc-daygrid-event {
   border-radius: 999px;
   padding: 2px 10px;
+}
+
+.calendar-shell .fc-dayGridMonth-view .fc-daygrid-day-frame {
+  min-height: 118px;
+}
+
+.calendar-shell .fc-dayGridMonth-view .fc-daygrid-event {
+  border-radius: 6px;
+  margin-top: 3px;
+  padding: 3px 6px;
+  white-space: normal;
 }
 
 .calendar-shell .fc-timegrid-axis-cushion {
@@ -1932,7 +1964,9 @@ a {
 }
 
 .stream-card.completed {
-  opacity: 0.68;
+  background: color-mix(in srgb, var(--surface-muted) 54%, var(--surface));
+  border-color: color-mix(in srgb, var(--muted) 26%, var(--line));
+  border-top-color: var(--muted);
 }
 
 .stream-card-header {
@@ -1946,7 +1980,9 @@ a {
 }
 
 .stream-card-title {
+  color: inherit;
   display: grid;
+  flex: 1 1 auto;
   gap: 3px;
   min-width: 0;
 }
@@ -1973,13 +2009,14 @@ a {
   border-radius: 8px;
   display: grid;
   gap: 10px;
-  grid-template-columns: 12px minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   min-height: 50px;
   padding: 8px 12px;
 }
 
 .project-row.completed {
-  opacity: 0.62;
+  background: color-mix(in srgb, var(--surface-muted) 66%, var(--surface));
+  border-color: color-mix(in srgb, var(--muted) 30%, var(--line));
 }
 
 .project-row-name {
@@ -1987,6 +2024,15 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-row-main {
+  align-items: center;
+  color: inherit;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 12px minmax(0, 1fr);
+  min-width: 0;
 }
 
 .project-row .counter {
@@ -2021,6 +2067,45 @@ a {
 
 .stream-create-form input {
   width: 200px;
+}
+
+.context-modal {
+  width: min(520px, 100%);
+}
+
+.context-edit-form {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.context-edit-form h2,
+.context-edit-form p {
+  margin: 0;
+}
+
+.context-edit-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.context-status-toggle {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  display: flex;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.context-status-toggle input {
+  accent-color: var(--primary);
+  height: 16px;
+  width: 16px;
 }
 
 .section-title {
@@ -2071,6 +2156,7 @@ a {
   }
 
   .calendar-layout,
+  .calendar-sidebar,
   .layout-grid,
   .settings-grid,
   .stream-grid,

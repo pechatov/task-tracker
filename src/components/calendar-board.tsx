@@ -9,6 +9,7 @@ import interactionPlugin, {
   type EventResizeDoneArg
 } from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
+import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import type {
   DatesSetArg,
@@ -45,7 +46,7 @@ type CalendarBoardProps = {
   overdueTasks: TaskRow[];
 };
 
-type CalendarView = "timeGridDay" | "timeGridWeek";
+type CalendarView = "timeGridDay" | "timeGridWeek" | "dayGridMonth";
 
 type DragSource = "none" | "backlog" | "calendar";
 
@@ -71,6 +72,53 @@ function subtractDays(date: Date, days: number) {
   const result = new Date(date);
   result.setDate(result.getDate() - days);
   return result;
+}
+
+function addDateDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  date.setDate(date.getDate() + days);
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function getDateOnly(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const date = new Date(value);
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
+function getMonthEventEnd(item: CalendarItem) {
+  if (!item.end) {
+    return undefined;
+  }
+
+  const startDate = getDateOnly(item.start);
+  const endDate = getDateOnly(item.end);
+
+  if (endDate <= startDate) {
+    return undefined;
+  }
+
+  return item.allDay ? endDate : addDateDays(endDate, 1);
+}
+
+function formatMonthTitle(date: Date) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    month: "long",
+    year: "numeric"
+  }).format(date);
 }
 
 function getEventEnd(start: Date, end: Date | null, allDay: boolean) {
@@ -193,8 +241,10 @@ export function CalendarBoard({
     return () => draggable.destroy();
   }, []);
 
-  const events = useMemo<EventInput[]>(
-    () =>
+  const events = useMemo<EventInput[]>(() => {
+    const isMonthView = view === "dayGridMonth";
+
+    return (
       items
         .filter((item) => {
           if (item.kind !== "task" || taskStatusFilter === "all") {
@@ -206,9 +256,9 @@ export function CalendarBoard({
         .map((item) => ({
           id: item.id,
           title: item.title,
-          start: item.start,
-          end: item.end ?? undefined,
-          allDay: item.allDay,
+          start: isMonthView ? getDateOnly(item.start) : item.start,
+          end: isMonthView ? getMonthEventEnd(item) : item.end ?? undefined,
+          allDay: isMonthView ? true : item.allDay,
           editable: item.editable,
           durationEditable: item.kind === "task",
           startEditable: item.kind === "task",
@@ -228,14 +278,12 @@ export function CalendarBoard({
             taskStatus: item.taskStatus,
             taskProjectName: item.taskProjectName,
             taskProjectColor: item.taskProjectColor,
-            taskStreamName: item.taskStreamName,
-            taskStreamColor: item.taskStreamColor,
             eventUrl: item.eventUrl,
             sourceLabel: item.sourceLabel
           }
-        })),
-    [items, taskStatusFilter]
-  );
+        }))
+    );
+  }, [items, taskStatusFilter, view]);
 
   function getCalendarApi() {
     return calendarRef.current?.getApi() ?? null;
@@ -267,6 +315,11 @@ export function CalendarBoard({
           subtractDays(arg.end, 1)
         )}`
       );
+      return;
+    }
+
+    if (arg.view.type === "dayGridMonth") {
+      setTitle(formatMonthTitle(arg.view.currentStart));
       return;
     }
 
@@ -531,6 +584,13 @@ export function CalendarBoard({
               >
                 Week
               </button>
+              <button
+                className={view === "dayGridMonth" ? "active" : ""}
+                type="button"
+                onClick={() => changeView("dayGridMonth")}
+              >
+                Month
+              </button>
             </div>
             <div className="segmented calendar-task-filter">
               <button
@@ -566,88 +626,74 @@ export function CalendarBoard({
               : "Бросьте на строку «Весь день», чтобы запланировать задачу на день без конкретного времени"}
           </div>
         ) : null}
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[timeGridPlugin, interactionPlugin]}
-          initialView={view}
-          initialDate={initialDate}
-          events={events}
-          datesSet={onDatesSet}
-          eventClick={onEventClick}
-          eventDragStart={onEventDragStart}
-          eventDragStop={onEventDragStop}
-          eventDrop={onEventDrop}
-          eventReceive={onEventReceive}
-          eventResize={onEventResize}
-          select={onSelect}
-          editable
-          droppable
-          selectable
-          selectMirror
-          eventResizableFromStart
-          allDayMaintainDuration={false}
-          allDaySlot
-          nowIndicator
-          height="auto"
-          slotMinTime="10:00:00"
-          slotMaxTime="23:00:00"
-          slotDuration="00:30:00"
-          defaultTimedEventDuration="01:00:00"
-          headerToolbar={false}
-          locale={ruLocale}
-          firstDay={1}
-          eventContent={(arg) => {
-            const props = arg.event.extendedProps;
-            const projectName =
-              typeof props.taskProjectName === "string"
-                ? props.taskProjectName
-                : null;
-            const projectColor =
-              typeof props.taskProjectColor === "string"
-                ? props.taskProjectColor
-                : "#77736a";
-            const streamName =
-              typeof props.taskStreamName === "string"
-                ? props.taskStreamName
-                : null;
-            const streamColor =
-              typeof props.taskStreamColor === "string"
-                ? props.taskStreamColor
-                : "#77736a";
+        <div className="calendar-scroll-area">
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView={view}
+            initialDate={initialDate}
+            events={events}
+            datesSet={onDatesSet}
+            eventClick={onEventClick}
+            eventDragStart={onEventDragStart}
+            eventDragStop={onEventDragStop}
+            eventDrop={onEventDrop}
+            eventReceive={onEventReceive}
+            eventResize={onEventResize}
+            select={onSelect}
+            editable
+            droppable
+            selectable
+            selectMirror
+            eventResizableFromStart
+            allDayMaintainDuration={false}
+            allDaySlot
+            nowIndicator
+            height="auto"
+            slotMinTime="10:00:00"
+            slotMaxTime="23:00:00"
+            slotDuration="00:30:00"
+            defaultTimedEventDuration="01:00:00"
+            dayMaxEvents={false}
+            displayEventTime={view !== "dayGridMonth"}
+            headerToolbar={false}
+            locale={ruLocale}
+            firstDay={1}
+            eventContent={(arg) => {
+              const props = arg.event.extendedProps;
+              const projectName =
+                typeof props.taskProjectName === "string"
+                  ? props.taskProjectName
+                  : null;
+              const projectColor =
+                typeof props.taskProjectColor === "string"
+                  ? props.taskProjectColor
+                  : "#77736a";
 
-            return (
-              <div className="fc-event-inner-content">
-                <span className="fc-event-title-text">{arg.event.title}</span>
-                {props.kind === "task" && (projectName || streamName) ? (
-                  <span className="label-row calendar-event-labels">
-                    {projectName ? (
+              return (
+                <div className="fc-event-inner-content">
+                  <span className="fc-event-title-text">{arg.event.title}</span>
+                  {props.kind === "task" && projectName ? (
+                    <span className="label-row calendar-event-labels">
                       <span
                         className="label"
                         style={{ "--label-color": projectColor } as CSSProperties}
                       >
                         {projectName}
                       </span>
-                    ) : null}
-                    {streamName ? (
-                      <span
-                        className="label"
-                        style={{ "--label-color": streamColor } as CSSProperties}
-                      >
-                        {streamName}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
-                {props.kind === "calendar-event" && props.sourceLabel ? (
-                  <span className="fc-event-source">
-                    {props.sourceLabel}
-                  </span>
-                ) : null}
-                {props.eventUrl ? <ExternalLink size={12} /> : null}
-              </div>
-            );
-          }}
-        />
+                    </span>
+                  ) : null}
+                  {props.kind === "calendar-event" && props.sourceLabel ? (
+                    <span className="fc-event-source">
+                      {props.sourceLabel}
+                    </span>
+                  ) : null}
+                  {props.eventUrl ? <ExternalLink size={12} /> : null}
+                </div>
+              );
+            }}
+          />
+        </div>
       </section>
 
       <aside className="calendar-sidebar" ref={taskSourceRef}>

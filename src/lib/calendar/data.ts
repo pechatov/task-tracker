@@ -28,8 +28,6 @@ export type CalendarItem = {
   taskStatus: TaskStatus | null;
   taskProjectName: string | null;
   taskProjectColor: string | null;
-  taskStreamName: string | null;
-  taskStreamColor: string | null;
   eventUrl: string | null;
   sourceLabel: string | null;
 };
@@ -230,8 +228,6 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           taskStatus: task.status,
           taskProjectName: task.projectName,
           taskProjectColor: task.projectColor,
-          taskStreamName: task.streamName,
-          taskStreamColor: task.streamColor,
           eventUrl: null,
           sourceLabel: null
         };
@@ -255,8 +251,6 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
         taskStatus: task.status,
         taskProjectName: task.projectName,
         taskProjectColor: task.projectColor,
-        taskStreamName: task.streamName,
-        taskStreamColor: task.streamColor,
         eventUrl: null,
         sourceLabel: null
       };
@@ -276,8 +270,6 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       taskStatus: null,
       taskProjectName: null,
       taskProjectColor: null,
-      taskStreamName: null,
-      taskStreamColor: null,
       eventUrl: getEventUrl(event),
       sourceLabel: event.calendarName
     }));

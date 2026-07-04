@@ -61,7 +61,7 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
   const createDefaults = data.selectedTask ? null : getCreateDefaults(params);
 
   return (
-    <main className="page">
+    <main className="page calendar-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Calendar</p>

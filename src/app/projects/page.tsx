@@ -1,46 +1,27 @@
 import type { CSSProperties } from "react";
-import { Archive, FolderKanban, Plus, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { FolderKanban, Pencil, Plus, X } from "lucide-react";
 import {
   createProject,
   createStream,
-  updateProjectStatus,
-  updateStreamStatus
+  updateProject,
+  updateStream,
 } from "@/app/actions/projects";
 import {
   getProjectsData,
-  type ContextStatus,
   type ProjectRow,
   type StreamGroup
 } from "@/lib/projects/data";
 
-function StatusToggle({
-  action,
-  entityId,
-  entityName,
-  status
-}: {
-  action: typeof updateStreamStatus | typeof updateProjectStatus;
-  entityId: string;
-  entityName: "streamId" | "projectId";
-  status: ContextStatus;
-}) {
-  const nextStatus = status === "active" ? "completed" : "active";
-  const Icon = status === "active" ? Archive : RotateCcw;
+type ProjectsPageProps = {
+  searchParams: Promise<{
+    editProject?: string | string[];
+    editStream?: string | string[];
+  }>;
+};
 
-  return (
-    <form action={action}>
-      <input name={entityName} type="hidden" value={entityId} />
-      <input name="status" type="hidden" value={nextStatus} />
-      <button
-        aria-label={status === "active" ? "Завершить" : "Вернуть в работу"}
-        className="icon-button"
-        title={status === "active" ? "Завершить" : "Вернуть в работу"}
-        type="submit"
-      >
-        <Icon size={15} />
-      </button>
-    </form>
-  );
+function getFirst(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function ProjectItem({ project }: { project: ProjectRow }) {
@@ -50,11 +31,13 @@ function ProjectItem({ project }: { project: ProjectRow }) {
         project.status === "active" ? "project-row" : "project-row completed"
       }
     >
-      <span
-        className="color-dot"
-        style={{ "--context-color": project.color } as CSSProperties}
-      />
-      <span className="project-row-name">{project.name}</span>
+      <span className="project-row-main">
+        <span
+          className="color-dot"
+          style={{ "--context-color": project.color } as CSSProperties}
+        />
+        <span className="project-row-name">{project.name}</span>
+      </span>
       {project.status === "active" ? (
         <span className="counter" title="Открытые задачи">
           {project.openTaskCount}
@@ -62,12 +45,14 @@ function ProjectItem({ project }: { project: ProjectRow }) {
       ) : (
         <span className="status-badge">Завершен</span>
       )}
-      <StatusToggle
-        action={updateProjectStatus}
-        entityId={project.id}
-        entityName="projectId"
-        status={project.status}
-      />
+      <Link
+        aria-label={`Редактировать проект ${project.name}`}
+        className="icon-button"
+        href={`/projects?editProject=${project.id}`}
+        title="Редактировать"
+      >
+        <Pencil size={15} />
+      </Link>
     </div>
   );
 }
@@ -92,12 +77,14 @@ function StreamCard({ stream }: { stream: StreamGroup }) {
               : "Стрим завершен"}
           </p>
         </div>
-        <StatusToggle
-          action={updateStreamStatus}
-          entityId={stream.id}
-          entityName="streamId"
-          status={stream.status}
-        />
+        <Link
+          aria-label={`Редактировать стрим ${stream.name}`}
+          className="icon-button"
+          href={`/projects?editStream=${stream.id}`}
+          title="Редактировать"
+        >
+          <Pencil size={15} />
+        </Link>
       </div>
 
       <div className="stream-card-projects">
@@ -131,14 +118,118 @@ function StreamCard({ stream }: { stream: StreamGroup }) {
   );
 }
 
-export default async function ProjectsPage() {
+function EditStreamModal({ stream }: { stream: StreamGroup }) {
+  return (
+    <div className="modal-backdrop">
+      <section className="task-modal context-modal">
+        <div className="modal-header">
+          <Link className="icon-button" href="/projects" aria-label="Закрыть">
+            <X size={18} />
+          </Link>
+        </div>
+        <form action={updateStream} className="context-edit-form">
+          <input name="streamId" type="hidden" value={stream.id} />
+          <div>
+            <p className="eyebrow">Стрим</p>
+            <h2>Редактирование стрима</h2>
+          </div>
+          <label className="field">
+            Название
+            <input name="name" required defaultValue={stream.name} />
+          </label>
+          <label className="field">
+            Цвет
+            <input name="color" type="color" defaultValue={stream.color} />
+          </label>
+          <label className="context-status-toggle">
+            <input
+              defaultChecked={stream.status === "completed"}
+              name="status"
+              type="checkbox"
+              value="completed"
+            />
+            Завершен
+          </label>
+          <div className="context-edit-actions">
+            <Link className="secondary-button" href="/projects">
+              Отмена
+            </Link>
+            <button className="primary-button" type="submit">
+              Сохранить
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function EditProjectModal({ project }: { project: ProjectRow }) {
+  return (
+    <div className="modal-backdrop">
+      <section className="task-modal context-modal">
+        <div className="modal-header">
+          <Link className="icon-button" href="/projects" aria-label="Закрыть">
+            <X size={18} />
+          </Link>
+        </div>
+        <form action={updateProject} className="context-edit-form">
+          <input name="projectId" type="hidden" value={project.id} />
+          <div>
+            <p className="eyebrow">Проект</p>
+            <h2>Редактирование проекта</h2>
+            <p className="muted">Стрим: {project.streamName}</p>
+          </div>
+          <label className="field">
+            Название
+            <input name="name" required defaultValue={project.name} />
+          </label>
+          <label className="field">
+            Цвет
+            <input name="color" type="color" defaultValue={project.color} />
+          </label>
+          <label className="context-status-toggle">
+            <input
+              defaultChecked={project.status === "completed"}
+              name="status"
+              type="checkbox"
+              value="completed"
+            />
+            Завершен
+          </label>
+          <div className="context-edit-actions">
+            <Link className="secondary-button" href="/projects">
+              Отмена
+            </Link>
+            <button className="primary-button" type="submit">
+              Сохранить
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+export default async function ProjectsPage({ searchParams }: ProjectsPageProps) {
   const data = await getProjectsData();
+  const params = await searchParams;
   const activeStreams = data.streamGroups.filter(
     (stream) => stream.status === "active"
   );
   const completedStreams = data.streamGroups.filter(
     (stream) => stream.status === "completed"
   );
+  const editStreamId = getFirst(params.editStream);
+  const editProjectId = getFirst(params.editProject);
+  const selectedStream = editStreamId
+    ? data.streamGroups.find((stream) => stream.id === editStreamId)
+    : null;
+  const selectedProject = editProjectId
+    ? data.streamGroups
+        .flatMap((stream) => stream.projects)
+        .find((project) => project.id === editProjectId)
+    : null;
 
   return (
     <main className="page">
@@ -190,6 +281,9 @@ export default async function ProjectsPage() {
           </section>
         </>
       ) : null}
+
+      {selectedStream ? <EditStreamModal stream={selectedStream} /> : null}
+      {selectedProject ? <EditProjectModal project={selectedProject} /> : null}
     </main>
   );
 }
