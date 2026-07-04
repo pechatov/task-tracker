@@ -45,6 +45,18 @@ function getEventUrl(event: CalendarEventRow) {
   return null;
 }
 
+function formatTimeRange(start: Date | null, end: Date | null) {
+  if (!start) {
+    return "";
+  }
+
+  if (!end) {
+    return formatDisplayTime(start);
+  }
+
+  return `${formatDisplayTime(start)}-${formatDisplayTime(end)}`;
+}
+
 function getBoardKey(data: Awaited<ReturnType<typeof getTodayData>>) {
   return [
     ...data.dayTasks.map((task) => `today:${task.id}:${task.title}:${task.dayPriority}`),
@@ -59,7 +71,6 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Сегодня по времени</p>
           <h2>Встречи и блоки</h2>
         </div>
         <CalendarClock size={20} />
@@ -72,7 +83,9 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
           const url = getEventUrl(event);
           const content = (
             <>
-              <span className="time">{formatDisplayTime(event.startsAt)}</span>
+              <span className="time">
+                {formatTimeRange(event.startsAt, event.endsAt)}
+              </span>
               <span
                 className="event-marker"
                 style={{ "--event-color": event.calendarColor } as CSSProperties}
@@ -106,7 +119,7 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
         {data.timedTasks.map((task) => (
           <Link className="timeline-row" href={`/?taskId=${task.id}`} key={task.id}>
             <span className="time">
-              {task.timeBlockStart ? formatDisplayTime(task.timeBlockStart) : ""}
+              {formatTimeRange(task.timeBlockStart, task.timeBlockEnd)}
             </span>
             <span
               className="event-marker"

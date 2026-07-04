@@ -713,12 +713,13 @@ a {
 }
 
 .timeline-row {
-  grid-template-columns: 56px 4px minmax(0, 1fr);
+  grid-template-columns: 96px 4px minmax(0, 1fr);
 }
 
 .time {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .event-marker {
