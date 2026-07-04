@@ -26,6 +26,7 @@ export const dynamic = "force-dynamic";
 type SettingsPageProps = {
   searchParams: Promise<{
     calendarError?: string | string[];
+    calendarErrorDetail?: string | string[];
     calendarStatus?: string | string[];
   }>;
 };
@@ -63,6 +64,16 @@ function getCalendarMessage(params: Awaited<SettingsPageProps["searchParams"]>) 
     return {
       className: "settings-message error",
       text: "Google OAuth не настроен в переменных окружения."
+    };
+  }
+
+  if (error === "connect") {
+    const detail = getFirst(params.calendarErrorDetail);
+    return {
+      className: "settings-message error",
+      text: detail
+        ? `Не удалось подключить календарь: ${detail}`
+        : "Не удалось подключить календарь. Проверьте доступы и попробуйте еще раз."
     };
   }
 

@@ -145,6 +145,15 @@ describe("normalizeEwsServerUrl", () => {
     );
   });
 
+  it("completes a URL that already ends with /EWS", () => {
+    expect(normalizeEwsServerUrl("https://mail.example.com/EWS")).toBe(
+      "https://mail.example.com/EWS/Exchange.asmx"
+    );
+    expect(normalizeEwsServerUrl("https://mail.example.com/ews/")).toBe(
+      "https://mail.example.com/ews/Exchange.asmx"
+    );
+  });
+
   it("keeps a full EWS endpoint URL as is", () => {
     expect(normalizeEwsServerUrl("https://mail.example.com/EWS/Exchange.asmx")).toBe(
       "https://mail.example.com/EWS/Exchange.asmx"

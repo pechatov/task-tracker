@@ -84,9 +84,15 @@ export function normalizeEwsServerUrl(rawUrl: string) {
   const trimmed = rawUrl.trim().replace(/\/+$/, "");
   const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 
-  return /\.asmx$/i.test(withScheme)
-    ? withScheme
-    : `${withScheme}/EWS/Exchange.asmx`;
+  if (/\.asmx$/i.test(withScheme)) {
+    return withScheme;
+  }
+
+  if (/\/ews$/i.test(withScheme)) {
+    return `${withScheme}/Exchange.asmx`;
+  }
+
+  return `${withScheme}/EWS/Exchange.asmx`;
 }
 
 async function callEws(credentials: EwsCredentials, body: string) {
@@ -103,11 +109,16 @@ async function callEws(credentials: EwsCredentials, body: string) {
   });
 
   if (response.status === 401) {
-    throw new Error("EWS authentication failed: check username and password");
+    throw new Error(
+      `EWS authentication failed for ${credentials.serverUrl}: ` +
+        "check username and password (the server must allow Basic auth)"
+    );
   }
 
   if (!response.ok) {
-    throw new Error(`EWS request failed: ${response.status}`);
+    throw new Error(
+      `EWS request failed: ${response.status} for ${credentials.serverUrl}`
+    );
   }
 
   return response.text();

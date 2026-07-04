@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { withDb } from "@/db/with-db";
 import {
@@ -26,6 +27,11 @@ function revalidateCalendarViews() {
   revalidatePath("/");
 }
 
+function connectErrorDetail(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  return encodeURIComponent(message.slice(0, 200));
+}
+
 export async function connectYandexCalendar(formData: FormData) {
   const serverUrl = getString(formData, "serverUrl") || "https://caldav.yandex.ru";
   const username = getString(formData, "username");
@@ -36,15 +42,25 @@ export async function connectYandexCalendar(formData: FormData) {
   }
 
   const userId = await withDb((db) => requireCurrentUserId(db));
+  let errorDetail: string | null = null;
 
-  await createYandexCalendarSource({
-    password,
-    serverUrl,
-    userId,
-    username
-  });
+  try {
+    await createYandexCalendarSource({
+      password,
+      serverUrl,
+      userId,
+      username
+    });
+  } catch (error) {
+    errorDetail = connectErrorDetail(error);
+  }
+
+  if (errorDetail) {
+    redirect(`/settings?calendarError=connect&calendarErrorDetail=${errorDetail}`);
+  }
 
   revalidateCalendarViews();
+  redirect("/settings?calendarStatus=connected");
 }
 
 export async function connectExchangeCalendar(formData: FormData) {
@@ -57,15 +73,25 @@ export async function connectExchangeCalendar(formData: FormData) {
   }
 
   const userId = await withDb((db) => requireCurrentUserId(db));
+  let errorDetail: string | null = null;
 
-  await createExchangeCalendarSource({
-    password,
-    serverUrl,
-    userId,
-    username
-  });
+  try {
+    await createExchangeCalendarSource({
+      password,
+      serverUrl,
+      userId,
+      username
+    });
+  } catch (error) {
+    errorDetail = connectErrorDetail(error);
+  }
+
+  if (errorDetail) {
+    redirect(`/settings?calendarError=connect&calendarErrorDetail=${errorDetail}`);
+  }
 
   revalidateCalendarViews();
+  redirect("/settings?calendarStatus=connected");
 }
 
 export async function syncCalendarSourceAction(formData: FormData) {
