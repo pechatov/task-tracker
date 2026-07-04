@@ -29,7 +29,9 @@ export const contextStatus = pgEnum("context_status", [
 
 export const calendarProvider = pgEnum("calendar_provider", [
   "microsoft_graph",
-  "yandex_caldav"
+  "yandex_caldav",
+  "exchange_ews",
+  "google_calendar"
 ]);
 
 export const calendarSourceStatus = pgEnum("calendar_source_status", [

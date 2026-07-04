@@ -1,4 +1,8 @@
-export type CalendarProvider = "microsoft_graph" | "yandex_caldav";
+export type CalendarProvider =
+  | "microsoft_graph"
+  | "yandex_caldav"
+  | "exchange_ews"
+  | "google_calendar";
 
 export type CalendarEventSnapshot = {
   externalEventId: string;

@@ -9,6 +9,7 @@ import {
   Type
 } from "lucide-react";
 import {
+  connectExchangeCalendar,
   connectYandexCalendar,
   disconnectCalendarSource,
   syncCalendarSourceAction,
@@ -58,10 +59,10 @@ function getCalendarMessage(params: Awaited<SettingsPageProps["searchParams"]>) 
     };
   }
 
-  if (error === "microsoft_not_configured") {
+  if (error === "google_not_configured") {
     return {
       className: "settings-message error",
-      text: "Microsoft OAuth не настроен в переменных окружения."
+      text: "Google OAuth не настроен в переменных окружения."
     };
   }
 
@@ -101,24 +102,54 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
           <div className="settings-row">
             <div>
-              <strong>Microsoft 365 / Exchange</strong>
+              <strong>Google Календарь</strong>
               <p>Read-only sync, окно берется из настроек синхронизации</p>
             </div>
-            {data.isMicrosoftConfigured ? (
-              <a className="secondary-button" href="/api/calendar/microsoft/start">
+            {data.isGoogleConfigured ? (
+              <a className="secondary-button" href="/api/calendar/google/start">
                 <LinkIcon size={16} />
                 Подключить
               </a>
             ) : (
               <a
                 className="secondary-button"
-                href="/settings?calendarError=microsoft_not_configured"
+                href="/settings?calendarError=google_not_configured"
               >
                 <LinkIcon size={16} />
                 Подключить
               </a>
             )}
           </div>
+
+          <form action={connectExchangeCalendar} className="settings-form">
+            <div className="settings-form-heading">
+              <div>
+                <strong>Exchange</strong>
+                <p>Логин и пароль вашего аккаунта Exchange, синхронизация через EWS</p>
+              </div>
+              <CalendarCheck2 size={18} />
+            </div>
+            <label className="field full-width">
+              Адрес сервера
+              <input
+                name="serverUrl"
+                placeholder="https://mail.example.com"
+                required
+                type="text"
+              />
+            </label>
+            <label className="field">
+              Логин
+              <input name="username" required type="text" />
+            </label>
+            <label className="field">
+              Пароль
+              <input name="password" required type="password" />
+            </label>
+            <button className="primary-button full-width" type="submit">
+              Подключить Exchange
+            </button>
+          </form>
 
           <form action={connectYandexCalendar} className="settings-form">
             <div className="settings-form-heading">

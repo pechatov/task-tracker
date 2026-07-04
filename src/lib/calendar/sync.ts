@@ -15,9 +15,17 @@ import {
 import {
   decryptCalendarCredentials,
   encryptCalendarCredentials,
-  type MicrosoftCalendarCredentials,
+  type ExchangeCalendarCredentials,
+  type GoogleCalendarCredentials,
   type YandexCalendarCredentials
 } from "./credentials";
+import {
+  fetchEwsCalendarFolders,
+  fetchEwsCalendarItems,
+  fetchEwsDefaultCalendarFolderId,
+  normalizeEwsServerUrl,
+  type EwsCalendarItem
+} from "./ews";
 import { getCalendarSyncWindow } from "./sync-window";
 import type {
   CalendarEventSnapshot,
@@ -34,7 +42,7 @@ type ConnectedCalendarRecord = typeof connectedCalendars.$inferSelect;
 
 type DavClient = Awaited<ReturnType<typeof createDAVClient>>;
 
-type MicrosoftTokenResponse = {
+type GoogleTokenResponse = {
   access_token: string;
   expires_in?: number;
   refresh_token?: string;
@@ -42,49 +50,53 @@ type MicrosoftTokenResponse = {
   token_type?: string;
 };
 
-type MicrosoftProfile = {
-  displayName?: string;
-  mail?: string;
-  userPrincipalName?: string;
-};
-
-type MicrosoftCalendar = {
-  id: string;
+type GoogleProfile = {
+  email?: string;
   name?: string;
-  color?: string;
-  hexColor?: string;
-  isDefaultCalendar?: boolean;
 };
 
-type MicrosoftEvent = {
+type GoogleCalendarListEntry = {
   id: string;
-  subject?: string;
-  start?: MicrosoftDateTime;
-  end?: MicrosoftDateTime;
-  isAllDay?: boolean;
-  location?: {
-    displayName?: string;
-  };
+  summary?: string;
+  backgroundColor?: string;
+  primary?: boolean;
+  deleted?: boolean;
+};
+
+type GoogleEventDateTime = {
+  date?: string;
+  dateTime?: string;
+};
+
+type GoogleEvent = {
+  id: string;
+  status?: string;
+  summary?: string;
+  start?: GoogleEventDateTime;
+  end?: GoogleEventDateTime;
+  location?: string;
   organizer?: {
-    emailAddress?: {
-      address?: string;
-      name?: string;
-    };
+    displayName?: string;
+    email?: string;
   };
   attendees?: unknown[];
-  webLink?: string;
-  onlineMeeting?: {
-    joinUrl?: string;
+  htmlLink?: string;
+  hangoutLink?: string;
+  conferenceData?: {
+    entryPoints?: {
+      entryPointType?: string;
+      uri?: string;
+    }[];
   };
-  lastModifiedDateTime?: string;
+  updated?: string;
 };
 
-type MicrosoftDateTime = {
-  dateTime?: string;
-  timeZone?: string;
-};
-
-const microsoftScopes = ["offline_access", "User.Read", "Calendars.Read"];
+const googleScopes = [
+  "openid",
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/calendar.readonly"
+];
 
 const calendarColors = [
   "#2d7dd2",
@@ -97,95 +109,82 @@ const calendarColors = [
   "#5c6f2f"
 ];
 
-const microsoftColorMap: Record<string, string> = {
-  auto: "#2d7dd2",
-  lightBlue: "#2d7dd2",
-  lightGreen: "#287d55",
-  lightOrange: "#c26a2c",
-  lightGray: "#77736a",
-  lightYellow: "#a37800",
-  lightTeal: "#008c95",
-  lightPink: "#a04f8b",
-  lightBrown: "#8a5a2b",
-  lightRed: "#b44b45",
-  maxColor: "#2d7dd2"
-};
-
 export function getCalendarProviderLabel(provider: CalendarProvider) {
-  return provider === "microsoft_graph" ? "Microsoft 365" : "Яндекс.Календарь";
+  switch (provider) {
+    case "exchange_ews":
+      return "Exchange";
+    case "google_calendar":
+      return "Google Календарь";
+    case "yandex_caldav":
+      return "Яндекс.Календарь";
+    default:
+      return "Microsoft 365";
+  }
 }
 
-export function getMicrosoftAuthorizationUrl(state: string) {
+export function getGoogleAuthorizationUrl(state: string) {
   const env = getEnv();
 
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
-    throw new Error("Microsoft calendar OAuth is not configured");
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw new Error("Google calendar OAuth is not configured");
   }
 
-  const url = new URL(
-    `https://login.microsoftonline.com/${env.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`
-  );
-  url.searchParams.set("client_id", env.MICROSOFT_CLIENT_ID);
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("redirect_uri", getMicrosoftRedirectUri());
-  url.searchParams.set("response_mode", "query");
-  url.searchParams.set("scope", microsoftScopes.join(" "));
+  url.searchParams.set("redirect_uri", getGoogleRedirectUri());
+  url.searchParams.set("scope", googleScopes.join(" "));
+  url.searchParams.set("access_type", "offline");
+  url.searchParams.set("prompt", "consent");
   url.searchParams.set("state", state);
 
   return url;
 }
 
-export function getMicrosoftRedirectUri() {
-  return new URL("/api/calendar/microsoft/callback", getEnv().APP_BASE_URL)
+export function getGoogleRedirectUri() {
+  return new URL("/api/calendar/google/callback", getEnv().APP_BASE_URL)
     .toString();
 }
 
-function getMicrosoftTokenUrl() {
-  return `https://login.microsoftonline.com/${
-    getEnv().MICROSOFT_TENANT_ID
-  }/oauth2/v2.0/token`;
-}
-
-async function exchangeMicrosoftToken(params: Record<string, string>) {
+async function exchangeGoogleToken(params: Record<string, string>) {
   const env = getEnv();
 
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
-    throw new Error("Microsoft calendar OAuth is not configured");
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw new Error("Google calendar OAuth is not configured");
   }
 
   const body = new URLSearchParams({
-    client_id: env.MICROSOFT_CLIENT_ID,
-    client_secret: env.MICROSOFT_CLIENT_SECRET,
+    client_id: env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
     ...params
   });
-  const response = await fetch(getMicrosoftTokenUrl(), {
+  const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body
   });
 
   if (!response.ok) {
-    throw new Error(`Microsoft token request failed: ${response.status}`);
+    throw new Error(`Google token request failed: ${response.status}`);
   }
 
-  return (await response.json()) as MicrosoftTokenResponse;
+  return (await response.json()) as GoogleTokenResponse;
 }
 
-export async function exchangeMicrosoftAuthorizationCode(code: string) {
-  const token = await exchangeMicrosoftToken({
+export async function exchangeGoogleAuthorizationCode(code: string) {
+  const token = await exchangeGoogleToken({
     code,
     grant_type: "authorization_code",
-    redirect_uri: getMicrosoftRedirectUri(),
-    scope: microsoftScopes.join(" ")
+    redirect_uri: getGoogleRedirectUri()
   });
 
-  return microsoftCredentialsFromToken(token);
+  return googleCredentialsFromToken(token);
 }
 
-async function refreshMicrosoftCredentials(
+async function refreshGoogleCredentials(
   db: Db,
   source: CalendarSourceRecord,
-  credentials: MicrosoftCalendarCredentials
+  credentials: GoogleCalendarCredentials
 ) {
   if (
     credentials.expiresAt &&
@@ -198,13 +197,11 @@ async function refreshMicrosoftCredentials(
     return credentials;
   }
 
-  const token = await exchangeMicrosoftToken({
+  const token = await exchangeGoogleToken({
     grant_type: "refresh_token",
-    refresh_token: credentials.refreshToken,
-    redirect_uri: getMicrosoftRedirectUri(),
-    scope: microsoftScopes.join(" ")
+    refresh_token: credentials.refreshToken
   });
-  const refreshed = microsoftCredentialsFromToken(token, credentials.refreshToken);
+  const refreshed = googleCredentialsFromToken(token, credentials.refreshToken);
   const encrypted = encryptCalendarCredentials(refreshed);
 
   await db
@@ -215,10 +212,10 @@ async function refreshMicrosoftCredentials(
   return refreshed;
 }
 
-function microsoftCredentialsFromToken(
-  token: MicrosoftTokenResponse,
+function googleCredentialsFromToken(
+  token: GoogleTokenResponse,
   fallbackRefreshToken?: string
-): MicrosoftCalendarCredentials {
+): GoogleCalendarCredentials {
   return {
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? fallbackRefreshToken,
@@ -228,26 +225,25 @@ function microsoftCredentialsFromToken(
   };
 }
 
-async function fetchMicrosoftJson<T>(url: string, accessToken: string) {
+async function fetchGoogleJson<T>(url: string, accessToken: string) {
   const response = await fetch(url, {
     headers: {
-      authorization: `Bearer ${accessToken}`,
-      prefer: 'outlook.timezone="UTC"'
+      authorization: `Bearer ${accessToken}`
     }
   });
 
   if (!response.ok) {
-    throw new Error(`Microsoft Graph request failed: ${response.status}`);
+    throw new Error(`Google API request failed: ${response.status}`);
   }
 
   return (await response.json()) as T;
 }
 
-export async function fetchMicrosoftProfile(
-  credentials: MicrosoftCalendarCredentials
+export async function fetchGoogleProfile(
+  credentials: GoogleCalendarCredentials
 ) {
-  return fetchMicrosoftJson<MicrosoftProfile>(
-    "https://graph.microsoft.com/v1.0/me",
+  return fetchGoogleJson<GoogleProfile>(
+    "https://www.googleapis.com/oauth2/v2/userinfo",
     credentials.accessToken
   );
 }
@@ -260,10 +256,6 @@ function colorFromString(value: string) {
 function normalizeCalendarColor(value: string | undefined, fallback: string) {
   if (value && /^#[0-9a-f]{6}$/i.test(value)) {
     return value;
-  }
-
-  if (value && microsoftColorMap[value]) {
-    return microsoftColorMap[value];
   }
 
   return colorFromString(fallback);
@@ -396,22 +388,39 @@ async function replaceCalendarEvents(
   }
 }
 
-function parseMicrosoftDateTime(value: MicrosoftDateTime | undefined) {
-  const raw = value?.dateTime;
+function parseGoogleEventDateTime(value: GoogleEventDateTime | undefined) {
+  if (value?.dateTime) {
+    const date = new Date(value.dateTime);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
 
-  if (!raw) {
+  if (value?.date) {
+    const date = new Date(`${value.date}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+}
+
+function googleEventUrl(event: GoogleEvent) {
+  if (event.hangoutLink) {
+    return event.hangoutLink;
+  }
+
+  const videoEntryPoint = event.conferenceData?.entryPoints?.find(
+    (entryPoint) => entryPoint.entryPointType === "video" && entryPoint.uri
+  );
+
+  return videoEntryPoint?.uri ?? event.htmlLink;
+}
+
+function mapGoogleEvent(event: GoogleEvent): CalendarEventSnapshot | null {
+  if (event.status === "cancelled") {
     return null;
   }
 
-  const normalized = /(?:z|[+-]\d{2}:\d{2})$/i.test(raw) ? raw : `${raw}Z`;
-  const date = new Date(normalized);
-
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function mapMicrosoftEvent(event: MicrosoftEvent): CalendarEventSnapshot | null {
-  const startsAt = parseMicrosoftDateTime(event.start);
-  const endsAt = parseMicrosoftDateTime(event.end);
+  const startsAt = parseGoogleEventDateTime(event.start);
+  const endsAt = parseGoogleEventDateTime(event.end);
 
   if (!startsAt || !endsAt || endsAt <= startsAt) {
     return null;
@@ -419,90 +428,173 @@ function mapMicrosoftEvent(event: MicrosoftEvent): CalendarEventSnapshot | null 
 
   return {
     externalEventId: event.id,
-    title: event.subject?.trim() || "Без названия",
+    title: event.summary?.trim() || "Без названия",
     startsAt,
     endsAt,
-    isAllDay: event.isAllDay ?? false,
-    location: event.location?.displayName,
-    organizer:
-      event.organizer?.emailAddress?.name ??
-      event.organizer?.emailAddress?.address,
+    isAllDay: Boolean(event.start?.date),
+    location: event.location,
+    organizer: event.organizer?.displayName ?? event.organizer?.email,
     attendeesSummary: event.attendees?.length
       ? `${event.attendees.length} участников`
       : undefined,
-    eventUrl: event.onlineMeeting?.joinUrl ?? event.webLink,
-    providerUpdatedAt: event.lastModifiedDateTime
-      ? new Date(event.lastModifiedDateTime)
-      : undefined
+    eventUrl: googleEventUrl(event),
+    providerUpdatedAt: event.updated ? new Date(event.updated) : undefined
   };
 }
 
-async function fetchMicrosoftCalendars(accessToken: string) {
-  const result = await fetchMicrosoftJson<{
-    value?: MicrosoftCalendar[];
-  }>(
-    "https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar",
-    accessToken
-  );
+async function fetchGoogleCalendars(accessToken: string) {
+  const calendars: GoogleCalendarListEntry[] = [];
+  let pageToken = "";
 
-  return result.value ?? [];
+  do {
+    const url = new URL(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+    );
+    url.searchParams.set("maxResults", "250");
+
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    const page = await fetchGoogleJson<{
+      items?: GoogleCalendarListEntry[];
+      nextPageToken?: string;
+    }>(url.toString(), accessToken);
+
+    calendars.push(...(page.items ?? []).filter((item) => !item.deleted));
+    pageToken = page.nextPageToken ?? "";
+  } while (pageToken);
+
+  return calendars;
 }
 
-async function fetchMicrosoftCalendarEvents(
+async function fetchGoogleCalendarEvents(
   accessToken: string,
   calendarId: string
 ) {
   const syncWindow = getCalendarSyncWindow();
   const snapshots: CalendarEventSnapshot[] = [];
-  let url =
-    `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(
-      calendarId
-    )}/calendarView` +
-    `?startDateTime=${encodeURIComponent(syncWindow.startsAt.toISOString())}` +
-    `&endDateTime=${encodeURIComponent(syncWindow.endsAt.toISOString())}` +
-    "&$top=100";
+  let pageToken = "";
 
-  while (url) {
-    const page = await fetchMicrosoftJson<{
-      "@odata.nextLink"?: string;
-      value?: MicrosoftEvent[];
-    }>(url, accessToken);
+  do {
+    const url = new URL(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+        calendarId
+      )}/events`
+    );
+    url.searchParams.set("timeMin", syncWindow.startsAt.toISOString());
+    url.searchParams.set("timeMax", syncWindow.endsAt.toISOString());
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("maxResults", "250");
 
-    for (const event of page.value ?? []) {
-      const snapshot = mapMicrosoftEvent(event);
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    const page = await fetchGoogleJson<{
+      items?: GoogleEvent[];
+      nextPageToken?: string;
+    }>(url.toString(), accessToken);
+
+    for (const event of page.items ?? []) {
+      const snapshot = mapGoogleEvent(event);
 
       if (snapshot) {
         snapshots.push(snapshot);
       }
     }
 
-    url = page["@odata.nextLink"] ?? "";
-  }
+    pageToken = page.nextPageToken ?? "";
+  } while (pageToken);
 
   return snapshots;
 }
 
-async function syncMicrosoftSource(db: Db, source: CalendarSourceRecord) {
+async function syncGoogleSource(db: Db, source: CalendarSourceRecord) {
   let credentials =
-    decryptCalendarCredentials<MicrosoftCalendarCredentials>(
+    decryptCalendarCredentials<GoogleCalendarCredentials>(
       source.encryptedCredentials
     );
-  credentials = await refreshMicrosoftCredentials(db, source, credentials);
+  credentials = await refreshGoogleCredentials(db, source, credentials);
 
-  const remoteCalendars = await fetchMicrosoftCalendars(credentials.accessToken);
+  const remoteCalendars = await fetchGoogleCalendars(credentials.accessToken);
   const snapshots = remoteCalendars.map((calendar) => ({
     externalCalendarId: calendar.id,
-    name: calendar.name?.trim() || "Microsoft calendar",
-    color: normalizeCalendarColor(calendar.hexColor ?? calendar.color, calendar.id),
-    isPrimary: calendar.isDefaultCalendar ?? false
+    name: calendar.summary?.trim() || "Google calendar",
+    color: normalizeCalendarColor(calendar.backgroundColor, calendar.id),
+    isPrimary: calendar.primary ?? false
   }));
   const localCalendars = await upsertConnectedCalendars(db, source, snapshots);
 
   for (const calendar of localCalendars.filter((item) => item.isEnabled)) {
-    const events = await fetchMicrosoftCalendarEvents(
+    const events = await fetchGoogleCalendarEvents(
       credentials.accessToken,
       calendar.externalCalendarId
     );
+    await replaceCalendarEvents(db, source, calendar, events);
+  }
+}
+
+function extractLocationUrl(location: string | undefined) {
+  return location?.match(/https?:\/\/\S+/i)?.[0];
+}
+
+function mapEwsCalendarItem(item: EwsCalendarItem): CalendarEventSnapshot | null {
+  const startsAt = item.start ? new Date(item.start) : null;
+  const endsAt = item.end ? new Date(item.end) : null;
+
+  if (
+    !startsAt ||
+    !endsAt ||
+    Number.isNaN(startsAt.getTime()) ||
+    Number.isNaN(endsAt.getTime()) ||
+    endsAt <= startsAt
+  ) {
+    return null;
+  }
+
+  const attendeeCount = item.displayTo
+    ? item.displayTo.split(";").filter((name) => name.trim()).length
+    : 0;
+
+  return {
+    externalEventId: item.id,
+    title: item.subject || "Без названия",
+    startsAt,
+    endsAt,
+    isAllDay: item.isAllDay ?? false,
+    location: item.location,
+    organizer: item.organizerName,
+    attendeesSummary: attendeeCount ? `${attendeeCount} участников` : undefined,
+    eventUrl: extractLocationUrl(item.location),
+    providerUpdatedAt: item.lastModified ? new Date(item.lastModified) : undefined
+  };
+}
+
+async function syncExchangeSource(db: Db, source: CalendarSourceRecord) {
+  const credentials =
+    decryptCalendarCredentials<ExchangeCalendarCredentials>(
+      source.encryptedCredentials
+    );
+  const remoteFolders = await fetchEwsCalendarFolders(credentials);
+  const defaultFolderId = await fetchEwsDefaultCalendarFolderId(credentials);
+  const snapshots = remoteFolders.map((folder) => ({
+    externalCalendarId: folder.id,
+    name: calendarDisplayName(folder.displayName, "Exchange calendar"),
+    color: colorFromString(folder.id),
+    isPrimary: folder.id === defaultFolderId
+  }));
+  const localCalendars = await upsertConnectedCalendars(db, source, snapshots);
+
+  for (const calendar of localCalendars.filter((item) => item.isEnabled)) {
+    const items = await fetchEwsCalendarItems(
+      credentials,
+      calendar.externalCalendarId,
+      getCalendarSyncWindow()
+    );
+    const events = items
+      .map(mapEwsCalendarItem)
+      .filter((event): event is CalendarEventSnapshot => event !== null);
     await replaceCalendarEvents(db, source, calendar, events);
   }
 }
@@ -639,10 +731,19 @@ export async function syncCalendarSource(sourceId: string) {
       return;
     }
 
-    if (source.provider === "microsoft_graph") {
-      await syncMicrosoftSource(db, source);
-    } else {
-      await syncYandexSource(db, source);
+    switch (source.provider) {
+      case "exchange_ews":
+        await syncExchangeSource(db, source);
+        break;
+      case "google_calendar":
+        await syncGoogleSource(db, source);
+        break;
+      case "yandex_caldav":
+        await syncYandexSource(db, source);
+        break;
+      default:
+        // Legacy providers (microsoft_graph) are no longer synced.
+        return;
     }
 
     await db
@@ -723,9 +824,44 @@ export async function createYandexCalendarSource(params: {
   return source.id;
 }
 
-export async function createMicrosoftCalendarSource(params: {
+export async function createExchangeCalendarSource(params: {
+  password: string;
+  serverUrl: string;
+  userId: string;
+  username: string;
+}) {
+  const credentials: ExchangeCalendarCredentials = {
+    password: params.password,
+    serverUrl: normalizeEwsServerUrl(params.serverUrl),
+    username: params.username
+  };
+
+  // Validate the login before storing anything.
+  await fetchEwsCalendarFolders(credentials);
+
+  const encrypted = encryptCalendarCredentials(credentials);
+  const [source] = await withDb((db) =>
+    db
+      .insert(calendarSources)
+      .values({
+        userId: params.userId,
+        provider: "exchange_ews",
+        displayName: "Exchange",
+        accountEmail: params.username,
+        readOnly: true,
+        ...encrypted
+      })
+      .returning({ id: calendarSources.id })
+  );
+
+  await syncCalendarSource(source.id);
+
+  return source.id;
+}
+
+export async function createGoogleCalendarSource(params: {
   accountEmail: string;
-  credentials: MicrosoftCalendarCredentials;
+  credentials: GoogleCalendarCredentials;
   displayName: string;
   userId: string;
 }) {
@@ -735,7 +871,7 @@ export async function createMicrosoftCalendarSource(params: {
       .insert(calendarSources)
       .values({
         userId: params.userId,
-        provider: "microsoft_graph",
+        provider: "google_calendar",
         displayName: params.displayName,
         accountEmail: params.accountEmail,
         readOnly: true,
@@ -749,7 +885,7 @@ export async function createMicrosoftCalendarSource(params: {
   return source.id;
 }
 
-export function getMicrosoftCalendarConfigured() {
+export function getGoogleCalendarConfigured() {
   const env = getEnv();
-  return Boolean(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET);
+  return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 }

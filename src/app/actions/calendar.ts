@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
 import {
+  createExchangeCalendarSource,
   createYandexCalendarSource,
   syncCalendarSource
 } from "@/lib/calendar/sync";
@@ -37,6 +38,27 @@ export async function connectYandexCalendar(formData: FormData) {
   const userId = await withDb((db) => requireCurrentUserId(db));
 
   await createYandexCalendarSource({
+    password,
+    serverUrl,
+    userId,
+    username
+  });
+
+  revalidateCalendarViews();
+}
+
+export async function connectExchangeCalendar(formData: FormData) {
+  const serverUrl = getString(formData, "serverUrl");
+  const username = getString(formData, "username");
+  const password = getString(formData, "password");
+
+  if (!serverUrl || !username || !password) {
+    throw new Error("Exchange server URL, username and password are required");
+  }
+
+  const userId = await withDb((db) => requireCurrentUserId(db));
+
+  await createExchangeCalendarSource({
     password,
     serverUrl,
     userId,
