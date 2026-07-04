@@ -6,25 +6,25 @@ import {
   type DAVCalendar,
   type DAVObject
 } from "tsdav";
-import { withDb } from "@/db/with-db";
+import { withDb } from "../../db/with-db";
 import {
   calendarEvents,
   calendarSources,
   connectedCalendars
-} from "@/db/schema";
+} from "../../db/schema";
 import {
   decryptCalendarCredentials,
   encryptCalendarCredentials,
   type MicrosoftCalendarCredentials,
   type YandexCalendarCredentials
-} from "@/lib/calendar/credentials";
-import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
+} from "./credentials";
+import { getCalendarSyncWindow } from "./sync-window";
 import type {
   CalendarEventSnapshot,
   CalendarProvider,
   ConnectedCalendarSnapshot
-} from "@/lib/calendar/types";
-import { getEnv } from "@/lib/env";
+} from "./types";
+import { getEnv } from "../env";
 
 type Db = Parameters<Parameters<typeof withDb>[0]>[0];
 

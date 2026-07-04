@@ -1,10 +1,10 @@
-import { getEnv } from "@/lib/env";
+import { getEnv } from "../env";
 import {
   decryptSecret,
   encryptSecret,
   readEncryptionKeyFromBase64,
   type EncryptedSecret
-} from "@/lib/security/credentials";
+} from "../security/credentials";
 
 export type MicrosoftCalendarCredentials = {
   accessToken: string;

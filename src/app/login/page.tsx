@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { login } from "@/app/actions/auth";
 import { getCurrentUser } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string | string[];

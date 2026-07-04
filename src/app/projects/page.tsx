@@ -13,6 +13,8 @@ import {
   type StreamGroup
 } from "@/lib/projects/data";
 
+export const dynamic = "force-dynamic";
+
 type ProjectsPageProps = {
   searchParams: Promise<{
     editProject?: string | string[];
