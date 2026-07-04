@@ -10,6 +10,7 @@ import { deleteTask } from "@/app/actions/tasks";
 import { QuickAddTask } from "@/components/quick-add-task";
 import { TaskLabels } from "@/components/task-labels";
 import { TaskForm } from "@/components/task-form";
+import { TaskTitle } from "@/components/task-title";
 import { TodayTaskBoard } from "@/components/today-task-board";
 import {
   formatDisplayDate,
@@ -129,7 +130,7 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
               } as CSSProperties}
             />
             <span className="task-main">
-              <span className="task-title">{task.title}</span>
+              <TaskTitle task={task} />
               <TaskLabels task={task} />
             </span>
           </Link>

@@ -8,6 +8,7 @@ import {
   CalendarDays,
   FolderKanban,
   LogOut,
+  Repeat2,
   Settings,
   SunMedium,
   type LucideIcon
@@ -22,6 +23,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/", label: "Today", icon: SunMedium },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/recurring" as Route, label: "Recurring", icon: Repeat2 },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/settings", label: "Settings", icon: Settings }
 ];

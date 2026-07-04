@@ -10,7 +10,9 @@ import {
   tasks
 } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
+import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { formatDateInput } from "@/lib/date";
+import { ensureRecurringTaskInstances } from "@/lib/recurring-tasks/data";
 
 export { withDb };
 export { requireCurrentUserId as getCurrentUserId } from "@/lib/auth/session";
@@ -43,6 +45,7 @@ export type TaskRow = {
   projectId: string | null;
   projectName: string | null;
   projectColor: string | null;
+  recurringTaskId: string | null;
   timeBlockStart: Date | null;
   timeBlockEnd: Date | null;
 };
@@ -108,6 +111,14 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
     const userId = await requireCurrentUserId(db);
     const today = formatDateInput();
     const weekEnd = getCurrentWeekEnd(today);
+    const syncWindow = getCalendarSyncWindow(new Date());
+
+    await ensureRecurringTaskInstances(
+      db,
+      userId,
+      formatDateInput(syncWindow.startsAt),
+      formatDateInput(syncWindow.endsAt)
+    );
 
     const activeStreams = await db
       .select({
@@ -152,6 +163,7 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       projectId: tasks.projectId,
       projectName: projects.name,
       projectColor: projects.color,
+      recurringTaskId: tasks.recurringTaskId,
       timeBlockStart: tasks.timeBlockStart,
       timeBlockEnd: tasks.timeBlockEnd
     };

@@ -652,6 +652,26 @@ a {
   white-space: nowrap;
 }
 
+.task-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-title-recurring-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 18px;
+  justify-content: center;
+  width: 18px;
+}
+
 .label-row {
   align-items: center;
   display: flex;
@@ -874,6 +894,10 @@ a {
   color: var(--text-on-primary);
 }
 
+.recurrence-status-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .status-cycle {
   align-items: center;
   background: var(--surface);
@@ -918,6 +942,34 @@ a {
 
 .delete-form .danger-button {
   width: 100%;
+}
+
+.recurring-layout {
+  grid-template-columns: minmax(360px, 500px) minmax(0, 1fr);
+}
+
+.recurring-template-row {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.recurring-template-row.paused {
+  opacity: 0.62;
+}
+
+.recurring-template-icon {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--accent);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.recurring-template-row.paused .recurring-template-icon {
+  color: var(--muted);
 }
 
 .inline-icon {
@@ -1115,6 +1167,28 @@ a {
   color: var(--muted);
   flex: 0 0 auto;
   font-size: 11px;
+}
+
+.fc-event-title-row {
+  align-items: flex-start;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+
+.calendar-recurring-badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--text-on-primary) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-on-primary) 30%, transparent);
+  border-radius: 999px;
+  color: inherit;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 17px;
+  justify-content: center;
+  margin-top: 1px;
+  width: 17px;
 }
 
 .fc-event-inner-content span {
@@ -2195,7 +2269,7 @@ a {
     border-top: 1px solid var(--line);
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     left: 0;
     position: fixed;
     right: 0;

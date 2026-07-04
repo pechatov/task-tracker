@@ -6,6 +6,9 @@ import { formatDisplayDate } from "@/lib/date";
 
 type DueDateFieldProps = {
   defaultValue: string;
+  label?: string;
+  name?: string;
+  placeholder?: string;
 };
 
 const weekdayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -52,7 +55,12 @@ function isSameDay(a: Date, b: Date | null) {
   );
 }
 
-export function DueDateField({ defaultValue }: DueDateFieldProps) {
+export function DueDateField({
+  defaultValue,
+  label = "Дата выполнения",
+  name = "dueDate",
+  placeholder = "Без даты — в бэклог"
+}: DueDateFieldProps) {
   const [value, setValue] = useState(defaultValue);
   const [isOpen, setIsOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(
@@ -114,16 +122,16 @@ export function DueDateField({ defaultValue }: DueDateFieldProps) {
 
   return (
     <label className="field due-date-field" ref={wrapperRef}>
-      Дата выполнения
+      {label}
       <input
         autoComplete="off"
         inputMode="numeric"
-        name="dueDate"
+        name={name}
         onChange={(event) => setValue(event.target.value)}
         onClick={openPicker}
         onFocus={openPicker}
         pattern="\d{2}-\d{2}-\d{4}"
-        placeholder="Без даты — в бэклог"
+        placeholder={placeholder}
         type="text"
         value={value}
       />

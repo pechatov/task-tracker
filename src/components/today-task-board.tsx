@@ -48,6 +48,7 @@ import { formatDisplayDate } from "@/lib/date";
 import type { TaskRow } from "@/lib/tasks/data";
 import { TaskLabels } from "@/components/task-labels";
 import { TaskDoneToggle } from "@/components/task-done-toggle";
+import { TaskTitle } from "@/components/task-title";
 
 type TaskColumn = "today" | "backlog" | "week" | "overdue";
 
@@ -248,7 +249,7 @@ function TaskDragPreview({ task }: { task: TaskRow }) {
       </span>
       <span className="priority">{task.dayPriority}</span>
       <span className="task-main">
-        <span className="task-title">{task.title}</span>
+        <TaskTitle task={task} />
         <TaskLabels task={task} />
       </span>
     </div>
@@ -309,7 +310,7 @@ function SortableTaskRow({
           <GripVertical size={16} />
         </span>
         <Link className="task-main" href={`/?taskId=${task.id}`}>
-          <span className="task-title">{task.title}</span>
+          <TaskTitle task={task} />
           <TaskLabels task={task} />
         </Link>
         <TaskDoneToggle status={task.status} taskId={task.id} />
@@ -337,7 +338,7 @@ function SortableTaskRow({
           <GripVertical size={16} />
         </span>
         <Link className="task-main" href={`/?taskId=${task.id}`}>
-          <span className="task-title">{task.title}</span>
+          <TaskTitle task={task} />
           <span className="task-meta-row">
             <TaskLabels task={task} />
             <span className={column === "week" ? "date-chip" : "date-chip overdue"}>
@@ -370,7 +371,7 @@ function SortableTaskRow({
       </span>
       <span className="priority">{priority ?? task.dayPriority}</span>
       <Link className="task-main" href={`/?taskId=${task.id}`}>
-        <span className="task-title">{task.title}</span>
+        <TaskTitle task={task} />
         <TaskLabels task={task} />
       </Link>
       <TaskDoneToggle status={task.status} taskId={task.id} />

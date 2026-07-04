@@ -27,6 +27,17 @@ export const contextStatus = pgEnum("context_status", [
   "completed"
 ]);
 
+export const recurringTaskFrequency = pgEnum("recurring_task_frequency", [
+  "daily",
+  "weekly",
+  "monthly"
+]);
+
+export const recurringTaskStatus = pgEnum("recurring_task_status", [
+  "active",
+  "paused"
+]);
+
 export const calendarProvider = pgEnum("calendar_provider", [
   "microsoft_graph",
   "yandex_caldav"
@@ -125,6 +136,65 @@ export const projects = pgTable(
   })
 );
 
+export const recurringTasks = pgTable(
+  "recurring_tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    startDate: date("start_date", { mode: "string" }).notNull(),
+    endDate: date("end_date", { mode: "string" }),
+    dayPriority: integer("day_priority").default(1).notNull(),
+    status: recurringTaskStatus("status").default("active").notNull(),
+    size: taskSize("size").default("medium").notNull(),
+    streamId: uuid("stream_id").references(() => streams.id, {
+      onDelete: "set null"
+    }),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null"
+    }),
+    frequency: recurringTaskFrequency("frequency").notNull(),
+    interval: integer("interval").default(1).notNull(),
+    dayOfWeek: integer("day_of_week"),
+    dayOfMonth: integer("day_of_month"),
+    timeBlockStartMinutes: integer("time_block_start_minutes"),
+    timeBlockEndMinutes: integer("time_block_end_minutes"),
+    ...timestamps
+  },
+  (table) => ({
+    userStatusIdx: index("recurring_tasks_user_id_status_idx").on(
+      table.userId,
+      table.status
+    ),
+    userStartDateIdx: index("recurring_tasks_user_id_start_date_idx").on(
+      table.userId,
+      table.startDate
+    ),
+    intervalCheck: check("recurring_tasks_interval_check", sql`
+      ${table.interval} > 0
+    `),
+    dateBoundsCheck: check("recurring_tasks_date_bounds_check", sql`
+      ${table.endDate} is null or ${table.endDate} >= ${table.startDate}
+    `),
+    dayOfWeekCheck: check("recurring_tasks_day_of_week_check", sql`
+      ${table.dayOfWeek} is null or (${table.dayOfWeek} >= 0 and ${table.dayOfWeek} <= 6)
+    `),
+    dayOfMonthCheck: check("recurring_tasks_day_of_month_check", sql`
+      ${table.dayOfMonth} is null or (${table.dayOfMonth} >= 1 and ${table.dayOfMonth} <= 31)
+    `),
+    timeBlockCheck: check("recurring_tasks_time_block_bounds_check", sql`
+      (${table.timeBlockStartMinutes} is null or (${table.timeBlockStartMinutes} >= 0 and ${table.timeBlockStartMinutes} < 1440))
+      and
+      (${table.timeBlockEndMinutes} is null or (${table.timeBlockEndMinutes} > 0 and ${table.timeBlockEndMinutes} <= 1440))
+      and
+      (${table.timeBlockEndMinutes} is null or (${table.timeBlockStartMinutes} is not null and ${table.timeBlockEndMinutes} > ${table.timeBlockStartMinutes}))
+    `)
+  })
+);
+
 export const tasks = pgTable(
   "tasks",
   {
@@ -144,6 +214,13 @@ export const tasks = pgTable(
     projectId: uuid("project_id").references(() => projects.id, {
       onDelete: "set null"
     }),
+    recurringTaskId: uuid("recurring_task_id").references(
+      () => recurringTasks.id,
+      { onDelete: "set null" }
+    ),
+    recurringOccurrenceDate: date("recurring_occurrence_date", {
+      mode: "string"
+    }),
     timeBlockStart: timestamp("time_block_start", { withTimezone: true }),
     timeBlockEnd: timestamp("time_block_end", { withTimezone: true }),
     ...timestamps
@@ -162,6 +239,12 @@ export const tasks = pgTable(
       table.dueDate,
       table.dayPriority
     ),
+    recurringTaskIdx: index("tasks_recurring_task_id_idx").on(
+      table.recurringTaskId
+    ),
+    recurringOccurrenceUnique: uniqueIndex(
+      "tasks_recurring_occurrence_unique"
+    ).on(table.recurringTaskId, table.recurringOccurrenceDate),
     timeBlockCheck: check("tasks_time_block_bounds_check", sql`
       (${table.timeBlockStart} is null and ${table.timeBlockEnd} is null)
       or
@@ -266,6 +349,7 @@ export const calendarEvents = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   streams: many(streams),
   projects: many(projects),
+  recurringTasks: many(recurringTasks),
   tasks: many(tasks),
   calendarSources: many(calendarSources)
 }));
@@ -276,6 +360,7 @@ export const streamsRelations = relations(streams, ({ one, many }) => ({
     references: [users.id]
   }),
   projects: many(projects),
+  recurringTasks: many(recurringTasks),
   tasks: many(tasks)
 }));
 
@@ -288,6 +373,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     fields: [projects.streamId],
     references: [streams.id]
   }),
+  recurringTasks: many(recurringTasks),
   tasks: many(tasks)
 }));
 
@@ -303,8 +389,31 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
   project: one(projects, {
     fields: [tasks.projectId],
     references: [projects.id]
+  }),
+  recurringTask: one(recurringTasks, {
+    fields: [tasks.recurringTaskId],
+    references: [recurringTasks.id]
   })
 }));
+
+export const recurringTasksRelations = relations(
+  recurringTasks,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [recurringTasks.userId],
+      references: [users.id]
+    }),
+    stream: one(streams, {
+      fields: [recurringTasks.streamId],
+      references: [streams.id]
+    }),
+    project: one(projects, {
+      fields: [recurringTasks.projectId],
+      references: [projects.id]
+    }),
+    tasks: many(tasks)
+  })
+);
 
 export const calendarSourcesRelations = relations(
   calendarSources,
