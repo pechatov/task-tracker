@@ -20,6 +20,8 @@ import { requireCurrentUser } from "@/lib/auth/session";
 import { getCalendarSettingsData } from "@/lib/calendar/settings-data";
 import { formatDisplayDate, formatDisplayTime } from "@/lib/date";
 
+export const dynamic = "force-dynamic";
+
 type SettingsPageProps = {
   searchParams: Promise<{
     calendarError?: string | string[];

@@ -7,6 +7,8 @@ import { requireCurrentUser } from "@/lib/auth/session";
 import { getCalendarData } from "@/lib/calendar/data";
 import { formatDateInput } from "@/lib/date";
 
+export const dynamic = "force-dynamic";
+
 type CalendarPageProps = {
   searchParams: Promise<{
     allDay?: string | string[];
