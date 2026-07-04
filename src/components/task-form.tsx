@@ -1,4 +1,5 @@
 import { createTask, updateTask } from "@/app/actions/tasks";
+import { DueDateField } from "@/components/due-date-field";
 import { TaskContextPicker } from "@/components/task-context-picker";
 import { TaskStatusCycle } from "@/components/task-status-cycle";
 import { formatDisplayDate, formatTimeInput } from "@/lib/date";
@@ -10,7 +11,7 @@ import type {
 import { taskSizeLabels } from "@/lib/tasks/size";
 
 type TaskFormProps = {
-  defaultDueDate: string;
+  defaultDueDate?: string | null;
   defaultTimeBlockEnd?: Date | null;
   defaultTimeBlockStart?: Date | null;
   projects: ProjectOption[];
@@ -52,7 +53,7 @@ function getProjectOptions(projects: ProjectOption[], task?: TaskRow | null) {
 }
 
 export function TaskForm({
-  defaultDueDate,
+  defaultDueDate = null,
   defaultTimeBlockEnd = null,
   defaultTimeBlockStart = null,
   projects,
@@ -64,7 +65,7 @@ export function TaskForm({
   const action = isEditing ? updateTask : createTask;
   const streamOptions = getStreamOptions(streams, task);
   const projectOptions = getProjectOptions(projects, task);
-  const dueDate = task?.dueDate ?? defaultDueDate;
+  const dueDate = task ? task.dueDate : defaultDueDate;
   const timeBlockStart = task?.timeBlockStart ?? defaultTimeBlockStart;
   const timeBlockEnd = task?.timeBlockEnd ?? defaultTimeBlockEnd;
 
@@ -101,18 +102,7 @@ export function TaskForm({
           />
         </label>
 
-        <label className="field">
-          Дата выполнения
-          <input
-            defaultValue={formatDisplayDate(dueDate)}
-            inputMode="numeric"
-            name="dueDate"
-            pattern="\d{2}-\d{2}-\d{4}"
-            placeholder="дд-мм-гггг"
-            required
-            type="text"
-          />
-        </label>
+        <DueDateField defaultValue={dueDate ? formatDisplayDate(dueDate) : ""} />
 
         <label className="field">
           Приоритет дня

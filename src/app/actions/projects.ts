@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import { withDb } from "@/db/with-db";
 import { projects, streams } from "@/db/schema";
 import {
@@ -17,6 +18,18 @@ function getString(formData: FormData, name: string) {
 
 function getContextStatus(formData: FormData): ContextStatus {
   return getString(formData, "status") === "completed" ? "completed" : "active";
+}
+
+function getColor(formData: FormData) {
+  const color = getString(formData, "color");
+
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#77736a";
+}
+
+function revalidateProjectViews() {
+  revalidatePath("/projects");
+  revalidatePath("/");
+  revalidatePath("/calendar");
 }
 
 export async function createStream(formData: FormData) {
@@ -51,8 +64,7 @@ export async function createStream(formData: FormData) {
       });
   });
 
-  revalidatePath("/projects");
-  revalidatePath("/");
+  revalidateProjectViews();
 }
 
 export async function updateStreamStatus(formData: FormData) {
@@ -72,8 +84,30 @@ export async function updateStreamStatus(formData: FormData) {
       .where(and(eq(streams.id, streamId), eq(streams.userId, userId)));
   });
 
-  revalidatePath("/projects");
-  revalidatePath("/");
+  revalidateProjectViews();
+}
+
+export async function updateStream(formData: FormData) {
+  const streamId = getString(formData, "streamId");
+  const name = getString(formData, "name");
+  const color = getColor(formData);
+  const status = getContextStatus(formData);
+
+  if (!streamId || !name) {
+    throw new Error("Stream id and name are required");
+  }
+
+  await withDb(async (db) => {
+    const userId = await requireCurrentUserId(db);
+
+    await db
+      .update(streams)
+      .set({ name, color, status, updatedAt: new Date() })
+      .where(and(eq(streams.id, streamId), eq(streams.userId, userId)));
+  });
+
+  revalidateProjectViews();
+  redirect("/projects");
 }
 
 export async function createProject(formData: FormData) {
@@ -124,8 +158,7 @@ export async function createProject(formData: FormData) {
       });
   });
 
-  revalidatePath("/projects");
-  revalidatePath("/");
+  revalidateProjectViews();
 }
 
 export async function updateProjectStatus(formData: FormData) {
@@ -145,6 +178,28 @@ export async function updateProjectStatus(formData: FormData) {
       .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
   });
 
-  revalidatePath("/projects");
-  revalidatePath("/");
+  revalidateProjectViews();
+}
+
+export async function updateProject(formData: FormData) {
+  const projectId = getString(formData, "projectId");
+  const name = getString(formData, "name");
+  const color = getColor(formData);
+  const status = getContextStatus(formData);
+
+  if (!projectId || !name) {
+    throw new Error("Project id and name are required");
+  }
+
+  await withDb(async (db) => {
+    const userId = await requireCurrentUserId(db);
+
+    await db
+      .update(projects)
+      .set({ name, color, status, updatedAt: new Date() })
+      .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
+  });
+
+  revalidateProjectViews();
+  redirect("/projects");
 }

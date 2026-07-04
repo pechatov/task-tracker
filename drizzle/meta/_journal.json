@@ -15,6 +15,13 @@
       "when": 1782760436400,
       "tag": "0001_overjoyed_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783110380053,
+      "tag": "0002_nebulous_ultragirl",
+      "breakpoints": true
     }
   ]
 }

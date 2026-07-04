@@ -1,6 +1,6 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { withDb } from "@/db/with-db";
-import { projects, streams } from "@/db/schema";
+import { projects, streams, tasks } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
 
 export type ContextStatus = "active" | "completed";
@@ -10,6 +10,7 @@ export type StreamRow = {
   name: string;
   color: string;
   status: ContextStatus;
+  openTaskCount: number;
 };
 
 export type ProjectRow = {
@@ -21,12 +22,16 @@ export type ProjectRow = {
   streamName: string;
   streamColor: string;
   streamStatus: ContextStatus;
+  openTaskCount: number;
+};
+
+export type StreamGroup = StreamRow & {
+  projects: ProjectRow[];
 };
 
 export type ProjectsData = {
-  streams: StreamRow[];
+  streamGroups: StreamGroup[];
   activeStreams: StreamRow[];
-  projects: ProjectRow[];
 };
 
 export async function getProjectsData(): Promise<ProjectsData> {
@@ -58,12 +63,49 @@ export async function getProjectsData(): Promise<ProjectsData> {
       .from(projects)
       .innerJoin(streams, eq(projects.streamId, streams.id))
       .where(eq(projects.userId, userId))
-      .orderBy(asc(streams.name), asc(projects.status), asc(projects.name));
+      .orderBy(asc(projects.status), asc(projects.name));
+
+    const openTaskContexts = await db
+      .select({
+        streamId: tasks.streamId,
+        projectId: tasks.projectId
+      })
+      .from(tasks)
+      .where(and(eq(tasks.userId, userId), eq(tasks.status, "open")));
+
+    const streamTaskCounts = new Map<string, number>();
+    const projectTaskCounts = new Map<string, number>();
+
+    for (const task of openTaskContexts) {
+      if (task.streamId) {
+        streamTaskCounts.set(
+          task.streamId,
+          (streamTaskCounts.get(task.streamId) ?? 0) + 1
+        );
+      }
+
+      if (task.projectId) {
+        projectTaskCounts.set(
+          task.projectId,
+          (projectTaskCounts.get(task.projectId) ?? 0) + 1
+        );
+      }
+    }
+
+    const streamGroups: StreamGroup[] = streamRows.map((stream) => ({
+      ...stream,
+      openTaskCount: streamTaskCounts.get(stream.id) ?? 0,
+      projects: projectRows
+        .filter((project) => project.streamId === stream.id)
+        .map((project) => ({
+          ...project,
+          openTaskCount: projectTaskCounts.get(project.id) ?? 0
+        }))
+    }));
 
     return {
-      streams: streamRows,
-      activeStreams: streamRows.filter((stream) => stream.status === "active"),
-      projects: projectRows
+      streamGroups,
+      activeStreams: streamGroups.filter((stream) => stream.status === "active")
     };
   });
 }

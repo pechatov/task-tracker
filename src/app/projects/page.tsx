@@ -1,102 +1,235 @@
 import type { CSSProperties } from "react";
-import { Archive, Plus, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { FolderKanban, Pencil, Plus, X } from "lucide-react";
 import {
   createProject,
   createStream,
-  updateProjectStatus,
-  updateStreamStatus
+  updateProject,
+  updateStream,
 } from "@/app/actions/projects";
 import {
   getProjectsData,
-  type ContextStatus,
   type ProjectRow,
-  type StreamRow
+  type StreamGroup
 } from "@/lib/projects/data";
 
-function StatusBadge({ status }: { status: ContextStatus }) {
-  return (
-    <span className={status === "active" ? "status-badge active" : "status-badge"}>
-      {status === "active" ? "Активен" : "Завершен"}
-    </span>
-  );
-}
+type ProjectsPageProps = {
+  searchParams: Promise<{
+    editProject?: string | string[];
+    editStream?: string | string[];
+  }>;
+};
 
-function StatusButton({
-  action,
-  entityId,
-  entityName,
-  status
-}: {
-  action: typeof updateStreamStatus | typeof updateProjectStatus;
-  entityId: string;
-  entityName: "streamId" | "projectId";
-  status: ContextStatus;
-}) {
-  const nextStatus = status === "active" ? "completed" : "active";
-  const Icon = status === "active" ? Archive : RotateCcw;
-
-  return (
-    <form action={action}>
-      <input name={entityName} type="hidden" value={entityId} />
-      <input name="status" type="hidden" value={nextStatus} />
-      <button className="secondary-button compact-button" type="submit">
-        <Icon size={15} />
-        {status === "active" ? "Завершить" : "Вернуть"}
-      </button>
-    </form>
-  );
-}
-
-function StreamItem({ stream }: { stream: StreamRow }) {
-  return (
-    <div className="context-row">
-      <span
-        className="color-dot"
-        style={{ "--context-color": stream.color } as CSSProperties}
-      />
-      <div className="context-main">
-        <strong>{stream.name}</strong>
-        <StatusBadge status={stream.status} />
-      </div>
-      <StatusButton
-        action={updateStreamStatus}
-        entityId={stream.id}
-        entityName="streamId"
-        status={stream.status}
-      />
-    </div>
-  );
+function getFirst(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function ProjectItem({ project }: { project: ProjectRow }) {
   return (
-    <div className="context-row">
-      <span
-        className="color-dot"
-        style={{ "--context-color": project.color } as CSSProperties}
-      />
-      <div className="context-main">
-        <strong>{project.name}</strong>
-        <span className="label-row">
-          <StatusBadge status={project.status} />
-          <span className="muted">{project.streamName}</span>
-          {project.streamStatus === "completed" ? (
-            <span className="muted">стрим завершен</span>
-          ) : null}
+    <div
+      className={
+        project.status === "active" ? "project-row" : "project-row completed"
+      }
+    >
+      <span className="project-row-main">
+        <span
+          className="color-dot"
+          style={{ "--context-color": project.color } as CSSProperties}
+        />
+        <span className="project-row-name">{project.name}</span>
+      </span>
+      {project.status === "active" ? (
+        <span className="counter" title="Открытые задачи">
+          {project.openTaskCount}
         </span>
-      </div>
-      <StatusButton
-        action={updateProjectStatus}
-        entityId={project.id}
-        entityName="projectId"
-        status={project.status}
-      />
+      ) : (
+        <span className="status-badge">Завершен</span>
+      )}
+      <Link
+        aria-label={`Редактировать проект ${project.name}`}
+        className="icon-button"
+        href={`/projects?editProject=${project.id}`}
+        title="Редактировать"
+      >
+        <Pencil size={15} />
+      </Link>
     </div>
   );
 }
 
-export default async function ProjectsPage() {
+function StreamCard({ stream }: { stream: StreamGroup }) {
+  return (
+    <section
+      className={
+        stream.status === "active"
+          ? "panel stream-card"
+          : "panel stream-card completed"
+      }
+      style={{ "--context-color": stream.color } as CSSProperties}
+    >
+      <div className="stream-card-header">
+        <span className="color-dot" />
+        <div className="stream-card-title">
+          <h2>{stream.name}</h2>
+          <p className="muted">
+            {stream.status === "active"
+              ? `Открытых задач: ${stream.openTaskCount}`
+              : "Стрим завершен"}
+          </p>
+        </div>
+        <Link
+          aria-label={`Редактировать стрим ${stream.name}`}
+          className="icon-button"
+          href={`/projects?editStream=${stream.id}`}
+          title="Редактировать"
+        >
+          <Pencil size={15} />
+        </Link>
+      </div>
+
+      <div className="stream-card-projects">
+        {stream.projects.length === 0 ? (
+          <p className="empty-state">Проектов пока нет.</p>
+        ) : null}
+        {stream.projects.map((project) => (
+          <ProjectItem key={project.id} project={project} />
+        ))}
+      </div>
+
+      {stream.status === "active" ? (
+        <form action={createProject} className="inline-create-form">
+          <input name="streamId" type="hidden" value={stream.id} />
+          <input
+            aria-label={`Новый проект в стриме ${stream.name}`}
+            name="name"
+            placeholder="Новый проект"
+            required
+          />
+          <button
+            aria-label="Создать проект"
+            className="secondary-button"
+            type="submit"
+          >
+            <Plus size={16} />
+          </button>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+function EditStreamModal({ stream }: { stream: StreamGroup }) {
+  return (
+    <div className="modal-backdrop">
+      <section className="task-modal context-modal">
+        <div className="modal-header">
+          <Link className="icon-button" href="/projects" aria-label="Закрыть">
+            <X size={18} />
+          </Link>
+        </div>
+        <form action={updateStream} className="context-edit-form">
+          <input name="streamId" type="hidden" value={stream.id} />
+          <div>
+            <p className="eyebrow">Стрим</p>
+            <h2>Редактирование стрима</h2>
+          </div>
+          <label className="field">
+            Название
+            <input name="name" required defaultValue={stream.name} />
+          </label>
+          <label className="field">
+            Цвет
+            <input name="color" type="color" defaultValue={stream.color} />
+          </label>
+          <label className="context-status-toggle">
+            <input
+              defaultChecked={stream.status === "completed"}
+              name="status"
+              type="checkbox"
+              value="completed"
+            />
+            Завершен
+          </label>
+          <div className="context-edit-actions">
+            <Link className="secondary-button" href="/projects">
+              Отмена
+            </Link>
+            <button className="primary-button" type="submit">
+              Сохранить
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function EditProjectModal({ project }: { project: ProjectRow }) {
+  return (
+    <div className="modal-backdrop">
+      <section className="task-modal context-modal">
+        <div className="modal-header">
+          <Link className="icon-button" href="/projects" aria-label="Закрыть">
+            <X size={18} />
+          </Link>
+        </div>
+        <form action={updateProject} className="context-edit-form">
+          <input name="projectId" type="hidden" value={project.id} />
+          <div>
+            <p className="eyebrow">Проект</p>
+            <h2>Редактирование проекта</h2>
+            <p className="muted">Стрим: {project.streamName}</p>
+          </div>
+          <label className="field">
+            Название
+            <input name="name" required defaultValue={project.name} />
+          </label>
+          <label className="field">
+            Цвет
+            <input name="color" type="color" defaultValue={project.color} />
+          </label>
+          <label className="context-status-toggle">
+            <input
+              defaultChecked={project.status === "completed"}
+              name="status"
+              type="checkbox"
+              value="completed"
+            />
+            Завершен
+          </label>
+          <div className="context-edit-actions">
+            <Link className="secondary-button" href="/projects">
+              Отмена
+            </Link>
+            <button className="primary-button" type="submit">
+              Сохранить
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+export default async function ProjectsPage({ searchParams }: ProjectsPageProps) {
   const data = await getProjectsData();
+  const params = await searchParams;
+  const activeStreams = data.streamGroups.filter(
+    (stream) => stream.status === "active"
+  );
+  const completedStreams = data.streamGroups.filter(
+    (stream) => stream.status === "completed"
+  );
+  const editStreamId = getFirst(params.editStream);
+  const editProjectId = getFirst(params.editProject);
+  const selectedStream = editStreamId
+    ? data.streamGroups.find((stream) => stream.id === editStreamId)
+    : null;
+  const selectedProject = editProjectId
+    ? data.streamGroups
+        .flatMap((stream) => stream.projects)
+        .find((project) => project.id === editProjectId)
+    : null;
 
   return (
     <main className="page">
@@ -105,74 +238,52 @@ export default async function ProjectsPage() {
           <p className="eyebrow">Projects / Streams</p>
           <h1>Классификация задач</h1>
         </div>
+        <form action={createStream} className="inline-create-form stream-create-form">
+          <input
+            aria-label="Название нового стрима"
+            name="name"
+            placeholder="Новый стрим"
+            required
+          />
+          <button className="primary-button" type="submit">
+            <Plus size={16} />
+            Создать стрим
+          </button>
+        </form>
       </header>
 
-      <section className="two-column">
-        <div className="panel">
-          <div className="panel-heading">
-            <h2>Стримы</h2>
+      {data.streamGroups.length === 0 ? (
+        <section className="panel projects-empty">
+          <FolderKanban size={28} />
+          <div>
+            <h2>Начните со стрима</h2>
+            <p className="muted">
+              Стрим — это направление работы, внутри которого живут проекты.
+              Создайте первый стрим, чтобы классифицировать задачи.
+            </p>
           </div>
-          <form action={createStream} className="management-form">
-            <label className="field">
-              Название
-              <input name="name" placeholder="Работа" required />
-            </label>
-            <button className="primary-button" type="submit">
-              <Plus size={16} />
-              Создать стрим
-            </button>
-          </form>
-          <div className="context-list">
-            {data.streams.length === 0 ? (
-              <p className="empty-state">Стримов пока нет.</p>
-            ) : null}
-            {data.streams.map((stream) => (
-              <StreamItem key={stream.id} stream={stream} />
-            ))}
-          </div>
-        </div>
+        </section>
+      ) : null}
 
-        <div className="panel">
-          <div className="panel-heading">
-            <h2>Проекты</h2>
-          </div>
-          <form action={createProject} className="management-form">
-            <label className="field">
-              Название
-              <input name="name" placeholder="Task Tracker" required />
-            </label>
-            <label className="field">
-              Стрим
-              <select name="streamId" required defaultValue="">
-                <option value="" disabled>
-                  Выберите стрим
-                </option>
-                {data.activeStreams.map((stream) => (
-                  <option key={stream.id} value={stream.id}>
-                    {stream.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              className="primary-button"
-              disabled={data.activeStreams.length === 0}
-              type="submit"
-            >
-              <Plus size={16} />
-              Создать проект
-            </button>
-          </form>
-          <div className="context-list">
-            {data.projects.length === 0 ? (
-              <p className="empty-state">Проектов пока нет.</p>
-            ) : null}
-            {data.projects.map((project) => (
-              <ProjectItem key={project.id} project={project} />
-            ))}
-          </div>
-        </div>
+      <section className="stream-grid">
+        {activeStreams.map((stream) => (
+          <StreamCard key={stream.id} stream={stream} />
+        ))}
       </section>
+
+      {completedStreams.length > 0 ? (
+        <>
+          <h2 className="section-title">Завершенные стримы</h2>
+          <section className="stream-grid">
+            {completedStreams.map((stream) => (
+              <StreamCard key={stream.id} stream={stream} />
+            ))}
+          </section>
+        </>
+      ) : null}
+
+      {selectedStream ? <EditStreamModal stream={selectedStream} /> : null}
+      {selectedProject ? <EditProjectModal project={selectedProject} /> : null}
     </main>
   );
 }

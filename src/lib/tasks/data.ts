@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte } from "drizzle-orm";
 import { cache } from "react";
 import { createDb } from "@/db/client";
 import { withDb } from "@/db/with-db";
@@ -33,7 +33,7 @@ export type TaskRow = {
   id: string;
   title: string;
   description: string | null;
-  dueDate: string;
+  dueDate: string | null;
   dayPriority: number;
   status: "open" | "done" | "cancelled";
   size: "small" | "medium" | "big";
@@ -63,21 +63,40 @@ export type TodayData = {
   streams: StreamOption[];
   projects: ProjectOption[];
   dayTasks: TaskRow[];
+  backlogTasks: TaskRow[];
+  weekTasks: TaskRow[];
   overdueTasks: TaskRow[];
   timedTasks: TaskRow[];
   calendarEvents: CalendarEventRow[];
   selectedTask: TaskRow | null;
 };
 
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return formatDateInput(date);
+}
+
+function getCurrentWeekEnd(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  const day = date.getDay();
+  return addDays(dateValue, day === 0 ? 0 : 7 - day);
+}
+
 export async function getNextDayPriority(
   db: ReturnType<typeof createDb>,
   userId: string,
-  dueDate: string
+  dueDate: string | null
 ) {
   const [latest] = await db
     .select({ dayPriority: tasks.dayPriority })
     .from(tasks)
-    .where(and(eq(tasks.userId, userId), eq(tasks.dueDate, dueDate)))
+    .where(
+      and(
+        eq(tasks.userId, userId),
+        dueDate === null ? isNull(tasks.dueDate) : eq(tasks.dueDate, dueDate)
+      )
+    )
     .orderBy(desc(tasks.dayPriority))
     .limit(1);
 
@@ -88,6 +107,7 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
   return withDb<TodayData>(async (db) => {
     const userId = await requireCurrentUserId(db);
     const today = formatDateInput();
+    const weekEnd = getCurrentWeekEnd(today);
 
     const activeStreams = await db
       .select({
@@ -149,6 +169,35 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
         )
       )
       .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt));
+
+    const backlogTasks = await db
+      .select(taskSelect)
+      .from(tasks)
+      .leftJoin(streams, eq(tasks.streamId, streams.id))
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, "open"),
+          isNull(tasks.dueDate)
+        )
+      )
+      .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt));
+
+    const weekTasks = await db
+      .select(taskSelect)
+      .from(tasks)
+      .leftJoin(streams, eq(tasks.streamId, streams.id))
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, "open"),
+          gt(tasks.dueDate, today),
+          lte(tasks.dueDate, weekEnd)
+        )
+      )
+      .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
 
     const overdueTasks = await db
       .select(taskSelect)
@@ -213,6 +262,8 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       streams: activeStreams,
       projects: activeProjects,
       dayTasks: openTodayTasks,
+      backlogTasks,
+      weekTasks,
       overdueTasks,
       timedTasks,
       calendarEvents: todaysCalendarEvents.filter(

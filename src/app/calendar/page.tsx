@@ -61,7 +61,7 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
   const createDefaults = data.selectedTask ? null : getCreateDefaults(params);
 
   return (
-    <main className="page">
+    <main className="page calendar-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Calendar</p>
@@ -69,7 +69,12 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
         </div>
       </header>
 
-      <CalendarBoard initialDate={data.today} items={data.items} />
+      <CalendarBoard
+        backlogTasks={data.backlogTasks}
+        initialDate={data.today}
+        items={data.items}
+        overdueTasks={data.overdueTasks}
+      />
 
       {data.selectedTask ? (
         <div className="modal-backdrop">
@@ -80,7 +85,6 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
               </Link>
             </div>
             <TaskForm
-              defaultDueDate={data.today}
               projects={data.projects}
               returnTo="/calendar"
               streams={data.streams}
