@@ -10,6 +10,7 @@ import {
 import { requireCurrentUserId } from "@/lib/auth/session";
 import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { formatDateInput } from "@/lib/date";
+import { ensureRecurringTaskInstances } from "@/lib/recurring-tasks/data";
 import type { ProjectOption, StreamOption, TaskRow } from "@/lib/tasks/data";
 import { getTaskSizeDurationMinutes, type TaskSize } from "@/lib/tasks/size";
 import type { TaskStatus } from "@/lib/tasks/status";
@@ -82,6 +83,8 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
     const syncWindow = getCalendarSyncWindow(new Date());
     const windowStart = formatDateInput(syncWindow.startsAt);
     const windowEnd = formatDateInput(syncWindow.endsAt);
+
+    await ensureRecurringTaskInstances(db, userId, windowStart, windowEnd);
 
     const activeStreams = await db
       .select({

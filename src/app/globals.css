@@ -874,6 +874,10 @@ a {
   color: var(--text-on-primary);
 }
 
+.recurrence-status-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .status-cycle {
   align-items: center;
   background: var(--surface);
@@ -918,6 +922,34 @@ a {
 
 .delete-form .danger-button {
   width: 100%;
+}
+
+.recurring-layout {
+  grid-template-columns: minmax(360px, 500px) minmax(0, 1fr);
+}
+
+.recurring-template-row {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.recurring-template-row.paused {
+  opacity: 0.62;
+}
+
+.recurring-template-icon {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--accent);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.recurring-template-row.paused .recurring-template-icon {
+  color: var(--muted);
 }
 
 .inline-icon {
@@ -2195,7 +2227,7 @@ a {
     border-top: 1px solid var(--line);
     bottom: 0;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     left: 0;
     position: fixed;
     right: 0;
