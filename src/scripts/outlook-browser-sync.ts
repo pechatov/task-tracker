@@ -10,6 +10,7 @@ import {
   mapMicrosoftEvent
 } from "../lib/calendar/sync";
 import type { CalendarEventSnapshot } from "../lib/calendar/types";
+import { closeDbPool } from "../db/with-db";
 
 type SyncOptions = {
   calendarUrl: string;
@@ -175,6 +176,7 @@ async function main() {
   }
 
   await context.close();
+  await closeDbPool();
 }
 
 main().catch((error) => {
