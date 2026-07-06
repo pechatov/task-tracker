@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, lt } from "drizzle-orm";
 import { projects, recurringTasks, streams, tasks } from "@/db/schema";
 import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { getNextContextColor } from "@/lib/context/colors";
@@ -105,6 +105,16 @@ function getTodayBoardDestination(formData: FormData) {
   throw new Error("Invalid task board destination");
 }
 
+function getCalendarTaskList(formData: FormData) {
+  const value = getString(formData, "list");
+
+  if (value === "backlog" || value === "overdue") {
+    return value;
+  }
+
+  throw new Error("Invalid calendar task list");
+}
+
 function ensureId(ids: string[], id: string) {
   return ids.includes(id) ? ids : [...ids, id];
 }
@@ -112,6 +122,14 @@ function ensureId(ids: string[], id: string) {
 function addDays(dateValue: string, days: number) {
   const date = new Date(`${dateValue}T00:00:00`);
   date.setDate(date.getDate() + days);
+  return formatDateInput(date);
+}
+
+function getCurrentWeekStart(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  const day = date.getDay();
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  date.setDate(date.getDate() - daysFromMonday);
   return formatDateInput(date);
 }
 
@@ -605,6 +623,38 @@ export async function moveTaskOnTodayBoard(formData: FormData) {
               )
             );
         }
+      }
+    });
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
+}
+
+export async function reorderCalendarTaskList(formData: FormData) {
+  const list = getCalendarTaskList(formData);
+  const taskIds = getTaskIds(formData, "taskIds");
+
+  if (taskIds.length === 0) {
+    return;
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const weekStart = getCurrentWeekStart(formatDateInput());
+
+    await db.transaction(async (tx) => {
+      for (const [index, id] of taskIds.entries()) {
+        await tx
+          .update(tasks)
+          .set({ dayPriority: index + 1, updatedAt: new Date() })
+          .where(
+            and(
+              eq(tasks.id, id),
+              eq(tasks.userId, userId),
+              list === "backlog" ? isNull(tasks.dueDate) : lt(tasks.dueDate, weekStart)
+            )
+          );
       }
     });
   });

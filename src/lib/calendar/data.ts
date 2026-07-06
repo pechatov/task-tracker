@@ -186,8 +186,8 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           )
         )
         .orderBy(
-          asc(tasks.dueDate),
           asc(tasks.dayPriority),
+          asc(tasks.dueDate),
           asc(tasks.createdAt)
         ),
       db
