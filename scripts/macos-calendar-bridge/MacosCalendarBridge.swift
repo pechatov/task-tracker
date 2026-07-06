@@ -184,12 +184,19 @@ func eventIdentifier(_ event: EKEvent, calendar: EKCalendar) -> String {
 }
 
 func participantKey(_ participant: EKParticipant) -> String? {
-    if let url = participant.url {
+    let url = participant.url
+    let absoluteURL = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if !absoluteURL.isEmpty {
         if url.scheme?.lowercased() == "mailto" {
-            return url.resourceSpecifier.lowercased()
+            let email = url.path.isEmpty
+                ? absoluteURL.replacingOccurrences(of: "mailto:", with: "")
+                : url.path
+
+            return email.lowercased()
         }
 
-        return url.absoluteString.lowercased()
+        return absoluteURL.lowercased()
     }
 
     guard let name = participant.name?.trimmingCharacters(in: .whitespacesAndNewlines),
