@@ -9,7 +9,8 @@ import { getNextContextColor } from "@/lib/context/colors";
 import {
   combineDateAndTime,
   formatDateInput,
-  parseDateInputValue
+  parseDateInputValue,
+  startOfMoscowDate
 } from "@/lib/date";
 import { ensureRecurringTaskInstances } from "@/lib/recurring-tasks/data";
 import {
@@ -223,7 +224,9 @@ function getTimeBlock(formData: FormData, dueDate: string | null) {
 
 function parseCalendarDate(formData: FormData, name: string) {
   const value = getString(formData, name);
-  const date = new Date(value);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? startOfMoscowDate(value)
+    : new Date(value);
 
   if (!value || Number.isNaN(date.getTime())) {
     throw new Error(`Invalid calendar ${name}`);

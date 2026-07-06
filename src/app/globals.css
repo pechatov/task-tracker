@@ -1208,8 +1208,17 @@ a {
   white-space: normal;
 }
 
+.calendar-shell .fc-timegrid-event.calendar-meeting-event {
+  position: absolute;
+}
+
 .calendar-shell .calendar-meeting-event .fc-event-main {
   color: inherit;
+  overflow: hidden;
+}
+
+.calendar-shell .calendar-meeting-event .fc-event-inner-content {
+  min-height: 0;
 }
 
 .calendar-shell .fc-event.fc-event-draggable {
@@ -2013,6 +2022,18 @@ a {
 
 .calendar-shell .fc-highlight {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.calendar-shell .fc-timegrid-now-indicator-line {
+  border-color: var(--danger);
+  border-width: 2px 0 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 20%, transparent);
+  z-index: 8;
+}
+
+.calendar-shell .fc-timegrid-now-indicator-arrow {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* absolute overlay: inserting it must not shift the grid, otherwise

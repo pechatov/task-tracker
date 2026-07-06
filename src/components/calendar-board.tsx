@@ -33,7 +33,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { moveTaskToBacklog, scheduleTaskFromCalendar } from "@/app/actions/tasks";
 import { TaskTitle } from "@/components/task-title";
 import type { CalendarItem } from "@/lib/calendar/data";
-import { formatDisplayDate } from "@/lib/date";
+import { formatDateInput, formatDisplayDate } from "@/lib/date";
 import type { TaskRow } from "@/lib/tasks/data";
 import {
   getTaskSizeDurationMinutes,
@@ -110,13 +110,14 @@ function subtractDays(date: Date, days: number) {
 }
 
 function addDateDays(dateValue: string, days: number) {
-  const date = new Date(`${dateValue}T00:00:00`);
-  date.setDate(date.getDate() + days);
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
 
   return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0")
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0")
   ].join("-");
 }
 
@@ -127,11 +128,7 @@ function getDateOnly(value: string) {
 
   const date = new Date(value);
 
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0")
-  ].join("-");
+  return formatDateInput(date);
 }
 
 function getMonthEventEnd(item: CalendarItem) {
@@ -196,8 +193,13 @@ function getTaskScheduleFormData(
   formData.set("taskId", taskId);
   formData.set("isAllDay", event.allDay ? "true" : "false");
   formData.set("wasAllDay", wasAllDay ? "true" : "false");
-  formData.set("startsAt", event.start.toISOString());
-  formData.set("endsAt", getEventEnd(event.start, event.end, event.allDay).toISOString());
+  formData.set("startsAt", event.allDay ? event.startStr : event.start.toISOString());
+  formData.set(
+    "endsAt",
+    event.allDay
+      ? event.endStr || addDateDays(event.startStr, 1)
+      : getEventEnd(event.start, event.end, event.allDay).toISOString()
+  );
 
   return formData;
 }
@@ -513,10 +515,15 @@ export function CalendarBoard({
     formData.set("taskId", taskId);
     formData.set("isAllDay", arg.event.allDay ? "true" : "false");
     formData.set("wasAllDay", "true");
-    formData.set("startsAt", arg.event.start.toISOString());
+    formData.set(
+      "startsAt",
+      arg.event.allDay ? arg.event.startStr : arg.event.start.toISOString()
+    );
     formData.set(
       "endsAt",
-      getEventEnd(arg.event.start, arg.event.end, arg.event.allDay).toISOString()
+      arg.event.allDay
+        ? arg.event.endStr || addDateDays(arg.event.startStr, 1)
+        : getEventEnd(arg.event.start, arg.event.end, arg.event.allDay).toISOString()
     );
 
     startTransition(async () => {
@@ -697,9 +704,19 @@ export function CalendarBoard({
             slotMinTime="10:00:00"
             slotMaxTime="23:00:00"
             slotDuration="00:30:00"
+            slotLabelFormat={{
+              hour: "2-digit",
+              hour12: false,
+              minute: "2-digit"
+            }}
             defaultTimedEventDuration="01:00:00"
             dayMaxEvents={false}
             displayEventTime={view !== "dayGridMonth"}
+            eventTimeFormat={{
+              hour: "2-digit",
+              hour12: false,
+              minute: "2-digit"
+            }}
             headerToolbar={false}
             locale={ruLocale}
             firstDay={1}
