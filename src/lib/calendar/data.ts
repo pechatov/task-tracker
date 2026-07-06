@@ -176,7 +176,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           lt(tasks.dueDate, weekStart)
         )
       )
-      .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
+      .orderBy(asc(tasks.dayPriority), asc(tasks.dueDate), asc(tasks.createdAt));
 
     const eventRows = await db
       .select({
