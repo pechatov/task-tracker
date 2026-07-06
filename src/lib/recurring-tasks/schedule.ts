@@ -1,4 +1,4 @@
-import { formatDateInput } from "../date";
+import { combineDateAndTime, formatDateInput } from "../date";
 
 export type RecurringTaskFrequency = "daily" | "weekly" | "monthly";
 
@@ -78,11 +78,9 @@ export function formatMinutesAsTime(minutes: number | null) {
 export function combineDateAndMinutes(dateValue: string, minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return new Date(
-    `${dateValue}T${String(hours).padStart(2, "0")}:${String(rest).padStart(
-      2,
-      "0"
-    )}:00`
+  return combineDateAndTime(
+    dateValue,
+    `${String(hours).padStart(2, "0")}:${String(rest).padStart(2, "0")}`
   );
 }
 

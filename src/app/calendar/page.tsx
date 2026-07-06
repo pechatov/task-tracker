@@ -5,7 +5,7 @@ import { CalendarBoard } from "@/components/calendar-board";
 import { TaskForm } from "@/components/task-form";
 import { requireCurrentUser } from "@/lib/auth/session";
 import { getCalendarData } from "@/lib/calendar/data";
-import { formatDateInput } from "@/lib/date";
+import { formatDateInput, startOfMoscowDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ function parseSlotDate(value: string | undefined, allDay: boolean) {
   }
 
   if (allDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return new Date(`${value}T00:00:00`);
+    return startOfMoscowDate(value);
   }
 
   const date = new Date(value);
