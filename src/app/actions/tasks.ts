@@ -3,13 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { projects, streams, tasks } from "@/db/schema";
+import { projects, recurringTasks, streams, tasks } from "@/db/schema";
+import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { getNextContextColor } from "@/lib/context/colors";
 import {
   combineDateAndTime,
   formatDateInput,
   parseDateInputValue
 } from "@/lib/date";
+import { ensureRecurringTaskInstances } from "@/lib/recurring-tasks/data";
+import {
+  getDayOfMonth,
+  getDayOfWeek,
+  type RecurringTaskFrequency
+} from "@/lib/recurring-tasks/schedule";
 import {
   getCurrentUserId,
   getNextDayPriority,
@@ -40,6 +47,26 @@ function getStatus(formData: FormData): TaskStatus {
 function getSize(formData: FormData): TaskSize {
   const value = getString(formData, "size");
   return isTaskSize(value) ? value : "medium";
+}
+
+function getRecurringFrequency(formData: FormData): RecurringTaskFrequency {
+  const value = getString(formData, "recurringFrequency");
+
+  if (value === "daily" || value === "weekly" || value === "monthly") {
+    return value;
+  }
+
+  return "weekly";
+}
+
+function getPositiveInt(formData: FormData, name: string, fallback: number) {
+  const value = Number.parseInt(getString(formData, name), 10);
+
+  if (!Number.isFinite(value) || value < 1) {
+    return fallback;
+  }
+
+  return value;
 }
 
 function getReturnTo(formData: FormData) {
@@ -211,6 +238,39 @@ function addMinutes(date: Date, minutes: number) {
   return result;
 }
 
+function getMinutesFromDate(date: Date | null) {
+  if (!date) {
+    return null;
+  }
+
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function getRecurringConversionSchedule(formData: FormData, startDate: string) {
+  const frequency = getRecurringFrequency(formData);
+
+  return {
+    frequency,
+    interval: getPositiveInt(formData, "recurringInterval", 1),
+    dayOfWeek: frequency === "weekly" ? getDayOfWeek(startDate) : null,
+    dayOfMonth: frequency === "monthly" ? getDayOfMonth(startDate) : null
+  };
+}
+
+async function ensureGeneratedRecurringInstances(
+  db: Parameters<Parameters<typeof withDb>[0]>[0],
+  userId: string
+) {
+  const syncWindow = getCalendarSyncWindow(new Date());
+
+  await ensureRecurringTaskInstances(
+    db,
+    userId,
+    formatDateInput(syncWindow.startsAt),
+    formatDateInput(syncWindow.endsAt)
+  );
+}
+
 export async function createTask(formData: FormData) {
   const returnTo = getReturnTo(formData);
 
@@ -255,16 +315,29 @@ export async function createTask(formData: FormData) {
 export async function updateTask(formData: FormData) {
   const taskId = getString(formData, "taskId");
   const returnTo = getReturnTo(formData);
+  const makeRecurring = getString(formData, "makeRecurring") === "true";
 
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
     const title = getString(formData, "title");
-    const dueDate = getDueDate(formData);
+    let dueDate = getDueDate(formData);
     const rawPriority = Number.parseInt(getString(formData, "dayPriority"), 10);
     const dayPriority = Number.isFinite(rawPriority) ? rawPriority : 1;
 
     if (!taskId || !title) {
       throw new Error("Task id and title are required");
+    }
+
+    if (makeRecurring && !dueDate) {
+      dueDate = formatDateInput();
+    }
+
+    const currentTask = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.userId, userId))
+    });
+
+    if (!currentTask) {
+      throw new Error("Task not found");
     }
 
     const context = await resolveTaskContext(db, userId, formData);
@@ -285,10 +358,43 @@ export async function updateTask(formData: FormData) {
         updatedAt: new Date()
       })
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+
+    if (makeRecurring && !currentTask.recurringTaskId && dueDate) {
+      const [recurringTask] = await db
+        .insert(recurringTasks)
+        .values({
+          userId,
+          title,
+          description: getNullableString(formData, "description"),
+          startDate: dueDate,
+          endDate: null,
+          dayPriority,
+          status: "active",
+          size: getSize(formData),
+          streamId: context.streamId,
+          projectId: context.projectId,
+          ...getRecurringConversionSchedule(formData, dueDate),
+          timeBlockStartMinutes: getMinutesFromDate(timeBlock.timeBlockStart),
+          timeBlockEndMinutes: getMinutesFromDate(timeBlock.timeBlockEnd)
+        })
+        .returning({ id: recurringTasks.id });
+
+      await db
+        .update(tasks)
+        .set({
+          recurringTaskId: recurringTask.id,
+          recurringOccurrenceDate: dueDate,
+          updatedAt: new Date()
+        })
+        .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+
+      await ensureGeneratedRecurringInstances(db, userId);
+    }
   });
 
   revalidatePath("/");
   revalidatePath("/calendar");
+  revalidatePath("/recurring");
   redirect(returnTo);
 }
 

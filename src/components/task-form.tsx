@@ -1,3 +1,4 @@
+import { Repeat2 } from "lucide-react";
 import { createTask, updateTask } from "@/app/actions/tasks";
 import { DueDateField } from "@/components/due-date-field";
 import { TaskContextPicker } from "@/components/task-context-picker";
@@ -52,6 +53,12 @@ function getProjectOptions(projects: ProjectOption[], task?: TaskRow | null) {
   ];
 }
 
+const recurringFrequencyOptions = [
+  { value: "daily", label: "дней" },
+  { value: "weekly", label: "недель" },
+  { value: "monthly", label: "месяцев" }
+];
+
 export function TaskForm({
   defaultDueDate = null,
   defaultTimeBlockEnd = null,
@@ -68,6 +75,7 @@ export function TaskForm({
   const dueDate = task ? task.dueDate : defaultDueDate;
   const timeBlockStart = task?.timeBlockStart ?? defaultTimeBlockStart;
   const timeBlockEnd = task?.timeBlockEnd ?? defaultTimeBlockEnd;
+  const recurringToggleId = `make-recurring-${task?.id ?? "new"}`;
 
   return (
     <section className="panel task-form-panel">
@@ -158,6 +166,53 @@ export function TaskForm({
             />
           </label>
         </div>
+
+        {isEditing ? (
+          task?.recurringTaskId ? (
+            <div className="recurring-existing full-width">
+              <Repeat2 size={18} />
+              <span>Повторяющаяся задача</span>
+            </div>
+          ) : (
+            <div className="recurring-conversion full-width">
+              <label className="recurring-toggle" htmlFor={recurringToggleId}>
+                <input
+                  className="recurring-toggle-input"
+                  id={recurringToggleId}
+                  name="makeRecurring"
+                  type="checkbox"
+                  value="true"
+                />
+                <span className="recurring-toggle-box">
+                  <Repeat2 size={18} />
+                </span>
+                <span>Сделать повторяющейся</span>
+              </label>
+
+              <div className="recurring-fields">
+                <label className="field">
+                  Каждые
+                  <input
+                    defaultValue={1}
+                    min={1}
+                    name="recurringInterval"
+                    type="number"
+                  />
+                </label>
+                <label className="field">
+                  Период
+                  <select defaultValue="weekly" name="recurringFrequency">
+                    {recurringFrequencyOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          )
+        ) : null}
 
         <button className="primary-button full-width" type="submit">
           {isEditing ? "Сохранить" : "Создать задачу"}

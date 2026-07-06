@@ -898,6 +898,71 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.recurring-conversion {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.recurring-toggle,
+.recurring-existing {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.recurring-toggle {
+  cursor: pointer;
+}
+
+.recurring-toggle-input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.recurring-toggle-box {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.recurring-toggle-input:checked + .recurring-toggle-box {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-on-primary);
+}
+
+.recurring-fields {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(100px, 160px) minmax(0, 1fr);
+}
+
+.recurring-conversion:has(.recurring-toggle-input:not(:checked)) .recurring-fields {
+  display: none;
+}
+
+.recurring-existing {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  min-height: 46px;
+  padding: 0 12px;
+}
+
 .status-cycle {
   align-items: center;
   background: var(--surface);
@@ -2334,6 +2399,7 @@ a {
   .font-selector,
   .inline-create-grid,
   .management-form,
+  .recurring-fields,
   .settings-form,
   .theme-selector {
     grid-template-columns: 1fr;
