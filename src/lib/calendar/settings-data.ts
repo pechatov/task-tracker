@@ -6,6 +6,7 @@ import {
   getCalendarProviderLabel,
   getGoogleCalendarConfigured
 } from "@/lib/calendar/sync";
+import { getMicrosoftCalendarConfigured } from "@/lib/calendar/microsoft";
 
 export type CalendarSettingsSource = {
   id: string;
@@ -27,6 +28,7 @@ export type CalendarSettingsCalendar = {
 
 export type CalendarSettingsData = {
   isGoogleConfigured: boolean;
+  isMicrosoftConfigured: boolean;
   sources: CalendarSettingsSource[];
 };
 
@@ -66,6 +68,7 @@ export async function getCalendarSettingsData(): Promise<CalendarSettingsData> {
 
     return {
       isGoogleConfigured: getGoogleCalendarConfigured(),
+      isMicrosoftConfigured: getMicrosoftCalendarConfigured(),
       sources: sourceRows.map((source) => ({
         id: source.id,
         accountEmail: source.accountEmail,

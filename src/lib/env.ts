@@ -39,7 +39,12 @@ const envSchema = z.object({
   CALENDAR_SYNC_FUTURE_DAYS: intFromString(60),
   CALENDAR_SYNC_POLL_SECONDS: intFromString(600),
   GOOGLE_CLIENT_ID: optionalString,
-  GOOGLE_CLIENT_SECRET: optionalString
+  GOOGLE_CLIENT_SECRET: optionalString,
+  MICROSOFT_CLIENT_ID: optionalString,
+  MICROSOFT_CLIENT_SECRET: optionalString,
+  MICROSOFT_TENANT_ID: z.string().optional().default("common"),
+  LOCAL_CALENDAR_IMPORT_TOKEN: optionalString,
+  LOCAL_CALENDAR_IMPORT_USER_EMAIL: optionalString
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

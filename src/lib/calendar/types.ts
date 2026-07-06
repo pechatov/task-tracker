@@ -2,7 +2,9 @@ export type CalendarProvider =
   | "microsoft_graph"
   | "yandex_caldav"
   | "exchange_ews"
-  | "google_calendar";
+  | "google_calendar"
+  | "browser_session"
+  | "local_bridge";
 
 export type CalendarEventSnapshot = {
   externalEventId: string;

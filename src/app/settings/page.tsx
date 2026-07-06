@@ -67,6 +67,20 @@ function getCalendarMessage(params: Awaited<SettingsPageProps["searchParams"]>) 
     };
   }
 
+  if (error === "microsoft_not_configured") {
+    return {
+      className: "settings-message error",
+      text: "Microsoft OAuth не настроен в переменных окружения."
+    };
+  }
+
+  if (error === "microsoft_callback" || error === "microsoft_state") {
+    return {
+      className: "settings-message error",
+      text: "Не удалось завершить подключение Microsoft 365. Попробуйте еще раз."
+    };
+  }
+
   if (error === "connect") {
     const detail = getFirst(params.calendarErrorDetail);
     return {
@@ -113,6 +127,27 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
           <div className="settings-row">
             <div>
+              <strong>Microsoft 365</strong>
+              <p>OAuth в браузере, поддерживает корпоративный MFA и одноразовый код</p>
+            </div>
+            {data.isMicrosoftConfigured ? (
+              <a className="secondary-button" href="/api/calendar/microsoft/start">
+                <LinkIcon size={16} />
+                Подключить
+              </a>
+            ) : (
+              <a
+                className="secondary-button"
+                href="/settings?calendarError=microsoft_not_configured"
+              >
+                <LinkIcon size={16} />
+                Подключить
+              </a>
+            )}
+          </div>
+
+          <div className="settings-row">
+            <div>
               <strong>Google Календарь</strong>
               <p>Read-only sync, окно берется из настроек синхронизации</p>
             </div>
@@ -136,7 +171,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             <div className="settings-form-heading">
               <div>
                 <strong>Exchange</strong>
-                <p>Логин и пароль вашего аккаунта Exchange, синхронизация через EWS</p>
+                <p>EWS Basic Auth для серверов без MFA или с паролем приложения</p>
               </div>
               <CalendarCheck2 size={18} />
             </div>

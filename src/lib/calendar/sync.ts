@@ -10,13 +10,15 @@ import { withDb } from "../../db/with-db";
 import {
   calendarEvents,
   calendarSources,
-  connectedCalendars
+  connectedCalendars,
+  users
 } from "../../db/schema";
 import {
   decryptCalendarCredentials,
   encryptCalendarCredentials,
   type ExchangeCalendarCredentials,
   type GoogleCalendarCredentials,
+  type MicrosoftGraphCalendarCredentials,
   type YandexCalendarCredentials
 } from "./credentials";
 import {
@@ -26,6 +28,13 @@ import {
   normalizeEwsServerUrl,
   type EwsCalendarItem
 } from "./ews";
+import {
+  fetchMicrosoftCalendarEvents,
+  fetchMicrosoftCalendars,
+  parseMicrosoftDateTime,
+  refreshMicrosoftCalendarCredentials,
+  type MicrosoftEvent
+} from "./microsoft";
 import { getCalendarSyncWindow } from "./sync-window";
 import type {
   CalendarEventSnapshot,
@@ -117,8 +126,14 @@ export function getCalendarProviderLabel(provider: CalendarProvider) {
       return "Google Календарь";
     case "yandex_caldav":
       return "Яндекс.Календарь";
-    default:
+    case "microsoft_graph":
       return "Microsoft 365";
+    case "browser_session":
+      return "Браузерная сессия";
+    case "local_bridge":
+      return "Локальный календарь";
+    default:
+      return provider;
   }
 }
 
@@ -535,6 +550,61 @@ async function syncGoogleSource(db: Db, source: CalendarSourceRecord) {
   }
 }
 
+async function refreshMicrosoftCredentials(
+  db: Db,
+  source: CalendarSourceRecord,
+  credentials: MicrosoftGraphCalendarCredentials
+) {
+  const refreshed = await refreshMicrosoftCalendarCredentials(credentials);
+
+  if (refreshed === credentials) {
+    return credentials;
+  }
+
+  const encrypted = encryptCalendarCredentials(refreshed);
+
+  await db
+    .update(calendarSources)
+    .set({ ...encrypted, updatedAt: new Date() })
+    .where(eq(calendarSources.id, source.id));
+
+  return refreshed;
+}
+
+function microsoftEventUrl(event: MicrosoftEvent) {
+  return event.onlineMeeting?.joinUrl ?? event.onlineMeetingUrl ?? event.webLink;
+}
+
+export function mapMicrosoftEvent(
+  event: MicrosoftEvent
+): CalendarEventSnapshot | null {
+  const startsAt = parseMicrosoftDateTime(event.start);
+  const endsAt = parseMicrosoftDateTime(event.end);
+
+  if (!startsAt || !endsAt || endsAt <= startsAt) {
+    return null;
+  }
+
+  const organizer = event.organizer?.emailAddress;
+
+  return {
+    externalEventId: event.id,
+    title: event.subject?.trim() || "Без названия",
+    startsAt,
+    endsAt,
+    isAllDay: event.isAllDay ?? false,
+    location: event.location?.displayName,
+    organizer: organizer?.name ?? organizer?.address,
+    attendeesSummary: event.attendees?.length
+      ? `${event.attendees.length} участников`
+      : undefined,
+    eventUrl: microsoftEventUrl(event),
+    providerUpdatedAt: event.lastModifiedDateTime
+      ? new Date(event.lastModifiedDateTime)
+      : undefined
+  };
+}
+
 function extractLocationUrl(location: string | undefined) {
   return location?.match(/https?:\/\/\S+/i)?.[0];
 }
@@ -594,6 +664,34 @@ async function syncExchangeSource(db: Db, source: CalendarSourceRecord) {
     );
     const events = items
       .map(mapEwsCalendarItem)
+      .filter((event): event is CalendarEventSnapshot => event !== null);
+    await replaceCalendarEvents(db, source, calendar, events);
+  }
+}
+
+async function syncMicrosoftSource(db: Db, source: CalendarSourceRecord) {
+  let credentials =
+    decryptCalendarCredentials<MicrosoftGraphCalendarCredentials>(
+      source.encryptedCredentials
+    );
+  credentials = await refreshMicrosoftCredentials(db, source, credentials);
+
+  const remoteCalendars = await fetchMicrosoftCalendars(credentials.accessToken);
+  const snapshots = remoteCalendars.map((calendar) => ({
+    externalCalendarId: calendar.id,
+    name: calendarDisplayName(calendar.name, "Microsoft calendar"),
+    color: colorFromString(calendar.id),
+    isPrimary: calendar.isDefaultCalendar ?? false
+  }));
+  const localCalendars = await upsertConnectedCalendars(db, source, snapshots);
+
+  for (const calendar of localCalendars.filter((item) => item.isEnabled)) {
+    const items = await fetchMicrosoftCalendarEvents(
+      credentials.accessToken,
+      calendar.externalCalendarId
+    );
+    const events = items
+      .map(mapMicrosoftEvent)
       .filter((event): event is CalendarEventSnapshot => event !== null);
     await replaceCalendarEvents(db, source, calendar, events);
   }
@@ -735,14 +833,18 @@ export async function syncCalendarSource(sourceId: string) {
       case "exchange_ews":
         await syncExchangeSource(db, source);
         break;
+      case "microsoft_graph":
+        await syncMicrosoftSource(db, source);
+        break;
       case "google_calendar":
         await syncGoogleSource(db, source);
         break;
       case "yandex_caldav":
         await syncYandexSource(db, source);
         break;
+      case "browser_session":
+        return;
       default:
-        // Legacy providers (microsoft_graph) are no longer synced.
         return;
     }
 
@@ -859,6 +961,32 @@ export async function createExchangeCalendarSource(params: {
   return source.id;
 }
 
+export async function createMicrosoftCalendarSource(params: {
+  accountEmail: string;
+  credentials: MicrosoftGraphCalendarCredentials;
+  displayName: string;
+  userId: string;
+}) {
+  const encrypted = encryptCalendarCredentials(params.credentials);
+  const [source] = await withDb((db) =>
+    db
+      .insert(calendarSources)
+      .values({
+        userId: params.userId,
+        provider: "microsoft_graph",
+        displayName: params.displayName,
+        accountEmail: params.accountEmail,
+        readOnly: true,
+        ...encrypted
+      })
+      .returning({ id: calendarSources.id })
+  );
+
+  await syncCalendarSource(source.id);
+
+  return source.id;
+}
+
 export async function createGoogleCalendarSource(params: {
   accountEmail: string;
   credentials: GoogleCalendarCredentials;
@@ -888,4 +1016,105 @@ export async function createGoogleCalendarSource(params: {
 export function getGoogleCalendarConfigured() {
   const env = getEnv();
   return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+}
+
+async function importCalendarEventsFromBridge(params: {
+  accountEmail: string;
+  calendarExternalId: string;
+  calendarName: string;
+  events: CalendarEventSnapshot[];
+  provider: "browser_session" | "local_bridge";
+  sourceDisplayName?: string;
+  sourceFallbackName: string;
+  userEmail: string;
+}) {
+  await withDb(async (db) => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, params.userEmail)
+    });
+
+    if (!user) {
+      throw new Error(`User not found: ${params.userEmail}`);
+    }
+
+    let source = await db.query.calendarSources.findFirst({
+      where: and(
+        eq(calendarSources.userId, user.id),
+        eq(calendarSources.provider, params.provider),
+        eq(calendarSources.accountEmail, params.accountEmail),
+        eq(calendarSources.status, "active")
+      )
+    });
+
+    if (!source) {
+      const [created] = await db
+        .insert(calendarSources)
+        .values({
+          userId: user.id,
+          provider: params.provider,
+          displayName: params.sourceDisplayName ?? params.sourceFallbackName,
+          accountEmail: params.accountEmail,
+          readOnly: true
+        })
+        .returning();
+      source = created;
+    }
+
+    const calendars = await upsertConnectedCalendars(db, source, [
+      {
+        externalCalendarId: params.calendarExternalId,
+        name: params.calendarName,
+        color: colorFromString(params.calendarExternalId),
+        isPrimary: true
+      }
+    ]);
+    const calendar = calendars.find(
+      (item) => item.externalCalendarId === params.calendarExternalId
+    );
+
+    if (!calendar) {
+      throw new Error("Failed to create browser session calendar");
+    }
+
+    await replaceCalendarEvents(db, source, calendar, params.events);
+    await db
+      .update(calendarSources)
+      .set({
+        syncState: {
+          lastSyncedAt: new Date().toISOString()
+        },
+        updatedAt: new Date()
+      })
+      .where(eq(calendarSources.id, source.id));
+  });
+}
+
+export async function importBrowserSessionCalendarEvents(params: {
+  accountEmail: string;
+  calendarExternalId: string;
+  calendarName: string;
+  events: CalendarEventSnapshot[];
+  sourceDisplayName?: string;
+  userEmail: string;
+}) {
+  await importCalendarEventsFromBridge({
+    ...params,
+    provider: "browser_session",
+    sourceFallbackName: "Outlook Web"
+  });
+}
+
+export async function importLocalBridgeCalendarEvents(params: {
+  accountEmail: string;
+  calendarExternalId: string;
+  calendarName: string;
+  events: CalendarEventSnapshot[];
+  sourceDisplayName?: string;
+  userEmail: string;
+}) {
+  await importCalendarEventsFromBridge({
+    ...params,
+    provider: "local_bridge",
+    sourceFallbackName: "macOS Calendar"
+  });
 }

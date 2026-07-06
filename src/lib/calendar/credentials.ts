@@ -14,6 +14,14 @@ export type GoogleCalendarCredentials = {
   tokenType?: string;
 };
 
+export type MicrosoftGraphCalendarCredentials = {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  scope?: string;
+  tokenType?: string;
+};
+
 export type ExchangeCalendarCredentials = {
   password: string;
   serverUrl: string;

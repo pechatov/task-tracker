@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tasktracker.calendar-bridge</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd /ABSOLUTE/PATH/TO/task-tracker &amp;&amp; /usr/bin/swift scripts/macos-calendar-bridge/MacosCalendarBridge.swift</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>TASK_TRACKER_BASE_URL</key>
+    <string>http://localhost:3001</string>
+    <key>TASK_TRACKER_USER_EMAIL</key>
+    <string>you@example.com</string>
+    <key>LOCAL_CALENDAR_IMPORT_TOKEN</key>
+    <string>replace-with-token-from-task-tracker-env</string>
+    <key>MACOS_CALENDAR_ACCOUNT_EMAIL</key>
+    <string>work@example.com</string>
+    <key>MACOS_CALENDAR_NAME_CONTAINS</key>
+    <string></string>
+  </dict>
+
+  <key>StartInterval</key>
+  <integer>600</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/tasktracker-calendar-bridge.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/tasktracker-calendar-bridge.err.log</string>
+</dict>
+</plist>

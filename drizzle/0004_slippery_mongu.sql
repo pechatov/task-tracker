@@ -1,0 +1,1 @@
+ALTER TYPE "public"."calendar_provider" ADD VALUE 'browser_session';

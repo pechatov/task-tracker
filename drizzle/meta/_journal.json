@@ -29,6 +29,20 @@
       "when": 1783194461210,
       "tag": "0003_calendar_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783234735070,
+      "tag": "0004_slippery_mongu",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783235635284,
+      "tag": "0005_fancy_miek",
+      "breakpoints": true
     }
   ]
 }
