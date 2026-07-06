@@ -13,6 +13,7 @@ struct Options {
     let listOnly: Bool
     let includeSoloEvents: Bool
     let includeUnacceptedEvents: Bool
+    let debugFilters: Bool
 }
 
 struct ImportPayload: Encodable {
@@ -118,7 +119,8 @@ func readOptions() throws -> Options {
         futureDays: intEnv("MACOS_CALENDAR_FUTURE_DAYS", defaultValue: 60),
         listOnly: env("MACOS_CALENDAR_LIST") == "1",
         includeSoloEvents: env("MACOS_CALENDAR_INCLUDE_SOLO_EVENTS") == "1",
-        includeUnacceptedEvents: env("MACOS_CALENDAR_INCLUDE_UNACCEPTED") == "1"
+        includeUnacceptedEvents: env("MACOS_CALENDAR_INCLUDE_UNACCEPTED") == "1",
+        debugFilters: env("MACOS_CALENDAR_DEBUG_FILTERS") == "1"
     )
 }
 
@@ -273,26 +275,75 @@ func isAcceptedByCurrentUser(_ event: EKEvent, options: Options) -> Bool {
     let participants = eventParticipants(event)
     let currentParticipants = participants.filter { isCurrentUser($0, options: options) }
 
-    if currentParticipants.isEmpty {
+    if let organizer = event.organizer, isCurrentUser(organizer, options: options) {
         return true
     }
 
-    if let organizer = event.organizer, isCurrentUser(organizer, options: options) {
-        return true
+    if currentParticipants.isEmpty {
+        return false
     }
 
     return currentParticipants.contains { $0.participantStatus == .accepted }
 }
 
+func participantStatusLabel(_ status: EKParticipantStatus) -> String {
+    switch status {
+    case .unknown:
+        return "unknown"
+    case .pending:
+        return "pending"
+    case .accepted:
+        return "accepted"
+    case .declined:
+        return "declined"
+    case .tentative:
+        return "tentative"
+    case .delegated:
+        return "delegated"
+    case .completed:
+        return "completed"
+    case .inProcess:
+        return "inProcess"
+    @unknown default:
+        return "future"
+    }
+}
+
+func debugFilterDecision(_ event: EKEvent, options: Options, decision: String) {
+    guard options.debugFilters else {
+        return
+    }
+
+    let currentParticipants = eventParticipants(event)
+        .filter { isCurrentUser($0, options: options) }
+        .map { participant in
+            [
+                participant.name ?? "unnamed",
+                participantKey(participant) ?? "no-key",
+                participantStatusLabel(participant.participantStatus)
+            ].joined(separator: "/")
+        }
+        .joined(separator: ", ")
+
+    print(
+        "Filter \(decision): \(event.title ?? "Untitled") | " +
+        "start=\(isoFormatter.string(from: event.startDate)) | " +
+        "current=[\(currentParticipants)]"
+    )
+}
+
 func shouldImportEvent(_ event: EKEvent, options: Options) -> (Bool, String?) {
     if !options.includeSoloEvents && !hasParticipantOtherThanCurrentUser(event, options: options) {
+        debugFilterDecision(event, options: options, decision: "skip solo")
         return (false, "solo")
     }
 
     if !options.includeUnacceptedEvents && !isAcceptedByCurrentUser(event, options: options) {
+        debugFilterDecision(event, options: options, decision: "skip unaccepted")
         return (false, "unaccepted")
     }
 
+    debugFilterDecision(event, options: options, decision: "keep")
     return (true, nil)
 }
 

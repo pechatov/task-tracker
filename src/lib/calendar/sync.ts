@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import ICAL from "ical.js";
 import {
   createDAVClient,
@@ -1038,6 +1038,28 @@ async function importCalendarEventsFromBridge(params: {
       )
     });
 
+    if (!source && params.provider === "local_bridge") {
+      const [existing] = await db
+        .select({ source: calendarSources })
+        .from(calendarSources)
+        .innerJoin(
+          connectedCalendars,
+          eq(connectedCalendars.sourceId, calendarSources.id)
+        )
+        .where(
+          and(
+            eq(calendarSources.userId, user.id),
+            eq(calendarSources.provider, params.provider),
+            eq(calendarSources.status, "active"),
+            eq(connectedCalendars.externalCalendarId, params.calendarExternalId)
+          )
+        )
+        .orderBy(desc(calendarSources.updatedAt))
+        .limit(1);
+
+      source = existing?.source;
+    }
+
     if (!source) {
       const [created] = await db
         .insert(calendarSources)
@@ -1050,6 +1072,20 @@ async function importCalendarEventsFromBridge(params: {
         })
         .returning();
       source = created;
+    } else if (
+      source.accountEmail !== params.accountEmail ||
+      source.displayName !== (params.sourceDisplayName ?? source.displayName)
+    ) {
+      const [updated] = await db
+        .update(calendarSources)
+        .set({
+          accountEmail: params.accountEmail,
+          displayName: params.sourceDisplayName ?? source.displayName,
+          updatedAt: new Date()
+        })
+        .where(eq(calendarSources.id, source.id))
+        .returning();
+      source = updated;
     }
 
     const calendars = await upsertConnectedCalendars(db, source, [
