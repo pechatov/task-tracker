@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lt, lte } from "drizzle-orm";
 import { cache } from "react";
 import { createDb } from "@/db/client";
 import { withDb } from "@/db/with-db";
@@ -11,7 +11,11 @@ import {
 } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
 import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
-import { formatDateInput } from "@/lib/date";
+import {
+  endOfMoscowDate,
+  formatDateInput,
+  startOfMoscowDate
+} from "@/lib/date";
 import { ensureRecurringTaskInstances } from "@/lib/recurring-tasks/data";
 
 export { withDb };
@@ -120,35 +124,6 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       formatDateInput(syncWindow.endsAt)
     );
 
-    const activeStreams = await db
-      .select({
-        id: streams.id,
-        name: streams.name,
-        color: streams.color
-      })
-      .from(streams)
-      .where(and(eq(streams.userId, userId), eq(streams.status, "active")))
-      .orderBy(asc(streams.name));
-
-    const activeProjects = await db
-      .select({
-        id: projects.id,
-        name: projects.name,
-        color: projects.color,
-        streamId: streams.id,
-        streamName: streams.name
-      })
-      .from(projects)
-      .innerJoin(streams, eq(projects.streamId, streams.id))
-      .where(
-        and(
-          eq(projects.userId, userId),
-          eq(projects.status, "active"),
-          eq(streams.status, "active")
-        )
-      )
-      .orderBy(asc(projects.name));
-
     const taskSelect = {
       id: tasks.id,
       title: tasks.title,
@@ -168,106 +143,146 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       timeBlockEnd: tasks.timeBlockEnd
     };
 
-    const openTodayTasks = await db
-      .select(taskSelect)
-      .from(tasks)
-      .leftJoin(streams, eq(tasks.streamId, streams.id))
-      .leftJoin(projects, eq(tasks.projectId, projects.id))
-      .where(
-        and(
-          eq(tasks.userId, userId),
-          eq(tasks.status, "open"),
-          eq(tasks.dueDate, today)
+    const [
+      activeStreams,
+      activeProjects,
+      openTodayTasks,
+      backlogTasks,
+      weekTasks,
+      overdueTasks,
+      todaysCalendarEvents,
+      selectedTask
+    ] = await Promise.all([
+      db
+        .select({
+          id: streams.id,
+          name: streams.name,
+          color: streams.color
+        })
+        .from(streams)
+        .where(and(eq(streams.userId, userId), eq(streams.status, "active")))
+        .orderBy(asc(streams.name)),
+      db
+        .select({
+          id: projects.id,
+          name: projects.name,
+          color: projects.color,
+          streamId: streams.id,
+          streamName: streams.name
+        })
+        .from(projects)
+        .innerJoin(streams, eq(projects.streamId, streams.id))
+        .where(
+          and(
+            eq(projects.userId, userId),
+            eq(projects.status, "active"),
+            eq(streams.status, "active")
+          )
         )
-      )
-      .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt));
-
-    const backlogTasks = await db
-      .select(taskSelect)
-      .from(tasks)
-      .leftJoin(streams, eq(tasks.streamId, streams.id))
-      .leftJoin(projects, eq(tasks.projectId, projects.id))
-      .where(
-        and(
-          eq(tasks.userId, userId),
-          eq(tasks.status, "open"),
-          isNull(tasks.dueDate)
+        .orderBy(asc(projects.name)),
+      db
+        .select(taskSelect)
+        .from(tasks)
+        .leftJoin(streams, eq(tasks.streamId, streams.id))
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            eq(tasks.status, "open"),
+            eq(tasks.dueDate, today)
+          )
         )
-      )
-      .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt));
-
-    const weekTasks = await db
-      .select(taskSelect)
-      .from(tasks)
-      .leftJoin(streams, eq(tasks.streamId, streams.id))
-      .leftJoin(projects, eq(tasks.projectId, projects.id))
-      .where(
-        and(
-          eq(tasks.userId, userId),
-          eq(tasks.status, "open"),
-          gt(tasks.dueDate, today),
-          lte(tasks.dueDate, weekEnd)
+        .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt)),
+      db
+        .select(taskSelect)
+        .from(tasks)
+        .leftJoin(streams, eq(tasks.streamId, streams.id))
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            eq(tasks.status, "open"),
+            isNull(tasks.dueDate)
+          )
         )
-      )
-      .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
-
-    const overdueTasks = await db
-      .select(taskSelect)
-      .from(tasks)
-      .leftJoin(streams, eq(tasks.streamId, streams.id))
-      .leftJoin(projects, eq(tasks.projectId, projects.id))
-      .where(
-        and(
-          eq(tasks.userId, userId),
-          eq(tasks.status, "open"),
-          lt(tasks.dueDate, today)
+        .orderBy(asc(tasks.dayPriority), asc(tasks.createdAt)),
+      db
+        .select(taskSelect)
+        .from(tasks)
+        .leftJoin(streams, eq(tasks.streamId, streams.id))
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            eq(tasks.status, "open"),
+            gt(tasks.dueDate, today),
+            lte(tasks.dueDate, weekEnd)
+          )
         )
-      )
-      .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
-
-    const timedTasks = await db
-      .select(taskSelect)
-      .from(tasks)
-      .leftJoin(streams, eq(tasks.streamId, streams.id))
-      .leftJoin(projects, eq(tasks.projectId, projects.id))
-      .where(
-        and(
-          eq(tasks.userId, userId),
-          eq(tasks.status, "open"),
-          eq(tasks.dueDate, today),
-          isNotNull(tasks.timeBlockStart)
+        .orderBy(
+          asc(tasks.dueDate),
+          asc(tasks.dayPriority),
+          asc(tasks.createdAt)
+        ),
+      db
+        .select(taskSelect)
+        .from(tasks)
+        .leftJoin(streams, eq(tasks.streamId, streams.id))
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            eq(tasks.status, "open"),
+            lt(tasks.dueDate, today)
+          )
         )
-      )
-      .orderBy(asc(tasks.timeBlockStart));
+        .orderBy(
+          asc(tasks.dueDate),
+          asc(tasks.dayPriority),
+          asc(tasks.createdAt)
+        ),
+      db
+        .select({
+          id: calendarEvents.id,
+          title: calendarEvents.title,
+          startsAt: calendarEvents.startsAt,
+          endsAt: calendarEvents.endsAt,
+          eventUrl: calendarEvents.eventUrl,
+          location: calendarEvents.location,
+          calendarName: connectedCalendars.name,
+          calendarColor: connectedCalendars.color
+        })
+        .from(calendarEvents)
+        .innerJoin(
+          connectedCalendars,
+          eq(calendarEvents.connectedCalendarId, connectedCalendars.id)
+        )
+        .where(
+          and(
+            eq(calendarEvents.userId, userId),
+            eq(connectedCalendars.isEnabled, true),
+            gte(calendarEvents.startsAt, startOfMoscowDate(today)),
+            lte(calendarEvents.startsAt, endOfMoscowDate(today))
+          )
+        )
+        .orderBy(asc(calendarEvents.startsAt)),
+      selectedTaskId
+        ? db
+            .select(taskSelect)
+            .from(tasks)
+            .leftJoin(streams, eq(tasks.streamId, streams.id))
+            .leftJoin(projects, eq(tasks.projectId, projects.id))
+            .where(and(eq(tasks.userId, userId), eq(tasks.id, selectedTaskId)))
+            .limit(1)
+        : Promise.resolve([])
+    ]);
 
-    const todaysCalendarEvents = await db
-      .select({
-        id: calendarEvents.id,
-        title: calendarEvents.title,
-        startsAt: calendarEvents.startsAt,
-        endsAt: calendarEvents.endsAt,
-        eventUrl: calendarEvents.eventUrl,
-        location: calendarEvents.location,
-        calendarName: connectedCalendars.name,
-        calendarColor: connectedCalendars.color
-      })
-      .from(calendarEvents)
-      .innerJoin(
-        connectedCalendars,
-        eq(calendarEvents.connectedCalendarId, connectedCalendars.id)
-      )
-      .where(and(eq(calendarEvents.userId, userId), eq(connectedCalendars.isEnabled, true)))
-      .orderBy(asc(calendarEvents.startsAt));
-
-    const selectedTask = selectedTaskId
-      ? await db
-          .select(taskSelect)
-          .from(tasks)
-          .leftJoin(streams, eq(tasks.streamId, streams.id))
-          .leftJoin(projects, eq(tasks.projectId, projects.id))
-          .where(and(eq(tasks.userId, userId), eq(tasks.id, selectedTaskId)))
-          .limit(1)
-      : [];
+    const timedTasks = openTodayTasks
+      .filter((task) => task.timeBlockStart !== null)
+      .sort(
+        (a, b) =>
+          (a.timeBlockStart?.getTime() ?? 0) - (b.timeBlockStart?.getTime() ?? 0)
+      );
 
     return {
       today,
@@ -278,9 +293,7 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       weekTasks,
       overdueTasks,
       timedTasks,
-      calendarEvents: todaysCalendarEvents.filter(
-        (event) => formatDateInput(event.startsAt) === today
-      ),
+      calendarEvents: todaysCalendarEvents,
       selectedTask: selectedTask[0] ?? null
     };
   });
