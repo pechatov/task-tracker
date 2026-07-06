@@ -113,6 +113,8 @@ MACOS_CALENDAR_NAME_CONTAINS=Work \
 swift scripts/macos-calendar-bridge/MacosCalendarBridge.swift
 ```
 
+By default the bridge skips events where the current user has not accepted the invite and events without any participant other than the current user. Set `MACOS_CALENDAR_INCLUDE_UNACCEPTED=1` or `MACOS_CALENDAR_INCLUDE_SOLO_EVENTS=1` to disable those filters for a run.
+
 For periodic sync, adapt `scripts/macos-calendar-bridge/com.tasktracker.calendar-bridge.plist.example`, put it into `~/Library/LaunchAgents/`, then run:
 
 ```sh

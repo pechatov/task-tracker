@@ -42,6 +42,7 @@ import type {
   ConnectedCalendarSnapshot
 } from "./types";
 import { getEnv } from "../env";
+import { CONTEXT_COLOR_PALETTE } from "../context/colors";
 
 type Db = Parameters<Parameters<typeof withDb>[0]>[0];
 
@@ -107,16 +108,7 @@ const googleScopes = [
   "https://www.googleapis.com/auth/calendar.readonly"
 ];
 
-const calendarColors = [
-  "#2d7dd2",
-  "#287d55",
-  "#b44b45",
-  "#7f56d9",
-  "#c26a2c",
-  "#008c95",
-  "#a04f8b",
-  "#5c6f2f"
-];
+const calendarColors = CONTEXT_COLOR_PALETTE;
 
 export function getCalendarProviderLabel(provider: CalendarProvider) {
   switch (provider) {

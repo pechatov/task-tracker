@@ -52,6 +52,39 @@ type DragSource = "none" | "backlog" | "calendar";
 
 type TaskStatusFilter = "all" | "open" | "done";
 
+function hexToRgb(color: string) {
+  const match = color.match(/^#?([0-9a-f]{6})$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const value = Number.parseInt(match[1], 16);
+
+  return {
+    red: (value >> 16) & 255,
+    green: (value >> 8) & 255,
+    blue: value & 255
+  };
+}
+
+function getReadableTextColor(backgroundColor: string) {
+  const rgb = hexToRgb(backgroundColor);
+
+  if (!rgb) {
+    return "#ffffff";
+  }
+
+  const luminance =
+    (0.2126 * rgb.red + 0.7152 * rgb.green + 0.0722 * rgb.blue) / 255;
+
+  return luminance > 0.58 ? "#1f2330" : "#ffffff";
+}
+
+function getMeetingBackgroundColor(color: string) {
+  return `color-mix(in srgb, ${color} 82%, var(--surface))`;
+}
+
 function isInsideRect(rect: DOMRect | undefined, x: number, y: number) {
   return (
     rect !== undefined &&
@@ -253,35 +286,43 @@ export function CalendarBoard({
 
           return item.taskStatus === taskStatusFilter;
         })
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          start: isMonthView ? getDateOnly(item.start) : item.start,
-          end: isMonthView ? getMonthEventEnd(item) : item.end ?? undefined,
-          allDay: isMonthView ? true : item.allDay,
-          editable: item.editable,
-          durationEditable: item.kind === "task",
-          startEditable: item.kind === "task",
-          backgroundColor: item.kind === "task" ? item.color : "#ffffff",
-          borderColor: item.color,
-          classNames: [
-            item.kind === "task" ? "calendar-task-event" : "calendar-meeting-event",
-            item.kind === "task" && item.taskStatus === "done"
-              ? "calendar-task-event-done"
-              : ""
-          ].filter(Boolean),
-          textColor: item.kind === "task" ? "#ffffff" : "#24231f",
-          extendedProps: {
-            kind: item.kind,
-            taskId: item.taskId,
-            taskSize: item.taskSize,
-            taskStatus: item.taskStatus,
-            taskProjectName: item.taskProjectName,
-            taskProjectColor: item.taskProjectColor,
-            eventUrl: item.eventUrl,
-            sourceLabel: item.sourceLabel
-          }
-        }))
+        .map((item) => {
+          const backgroundColor =
+            item.kind === "task" ? item.color : getMeetingBackgroundColor(item.color);
+
+          return {
+            id: item.id,
+            title: item.title,
+            start: isMonthView ? getDateOnly(item.start) : item.start,
+            end: isMonthView ? getMonthEventEnd(item) : item.end ?? undefined,
+            allDay: isMonthView ? true : item.allDay,
+            editable: item.editable,
+            durationEditable: item.kind === "task",
+            startEditable: item.kind === "task",
+            backgroundColor,
+            borderColor: item.color,
+            classNames: [
+              item.kind === "task" ? "calendar-task-event" : "calendar-meeting-event",
+              item.kind === "task" && item.taskStatus === "done"
+                ? "calendar-task-event-done"
+                : ""
+            ].filter(Boolean),
+            textColor:
+              item.kind === "task"
+                ? "#ffffff"
+                : getReadableTextColor(item.color),
+            extendedProps: {
+              kind: item.kind,
+              taskId: item.taskId,
+              taskSize: item.taskSize,
+              taskStatus: item.taskStatus,
+              taskProjectName: item.taskProjectName,
+              taskProjectColor: item.taskProjectColor,
+              eventUrl: item.eventUrl,
+              sourceLabel: item.sourceLabel
+            }
+          };
+        })
     );
   }, [items, taskStatusFilter, view]);
 

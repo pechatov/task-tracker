@@ -11,6 +11,8 @@ struct Options {
     let pastDays: Int
     let futureDays: Int
     let listOnly: Bool
+    let includeSoloEvents: Bool
+    let includeUnacceptedEvents: Bool
 }
 
 struct ImportPayload: Encodable {
@@ -33,6 +35,13 @@ struct CalendarEventPayload: Encodable {
     let attendeesSummary: String?
     let eventUrl: String?
     let providerUpdatedAt: String?
+}
+
+struct EventFilterResult {
+    let events: [CalendarEventPayload]
+    let scanned: Int
+    let skippedSolo: Int
+    let skippedUnaccepted: Int
 }
 
 enum BridgeError: Error, CustomStringConvertible {
@@ -107,7 +116,9 @@ func readOptions() throws -> Options {
         calendarNameFilter: env("MACOS_CALENDAR_NAME_CONTAINS"),
         pastDays: intEnv("MACOS_CALENDAR_PAST_DAYS", defaultValue: 60),
         futureDays: intEnv("MACOS_CALENDAR_FUTURE_DAYS", defaultValue: 60),
-        listOnly: env("MACOS_CALENDAR_LIST") == "1"
+        listOnly: env("MACOS_CALENDAR_LIST") == "1",
+        includeSoloEvents: env("MACOS_CALENDAR_INCLUDE_SOLO_EVENTS") == "1",
+        includeUnacceptedEvents: env("MACOS_CALENDAR_INCLUDE_UNACCEPTED") == "1"
     )
 }
 
@@ -172,6 +183,112 @@ func eventIdentifier(_ event: EKEvent, calendar: EKCalendar) -> String {
     return "\(calendar.calendarIdentifier):\(stablePart):\(isoFormatter.string(from: event.startDate))"
 }
 
+func participantKey(_ participant: EKParticipant) -> String? {
+    if let url = participant.url {
+        if url.scheme?.lowercased() == "mailto" {
+            return url.resourceSpecifier.lowercased()
+        }
+
+        return url.absoluteString.lowercased()
+    }
+
+    guard let name = participant.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !name.isEmpty else {
+        return nil
+    }
+
+    return name.lowercased()
+}
+
+func isPersonLikeParticipant(_ participant: EKParticipant) -> Bool {
+    switch participant.participantType {
+    case .person, .group, .unknown:
+        return true
+    case .room, .resource:
+        return false
+    @unknown default:
+        return true
+    }
+}
+
+func accountKeys(options: Options) -> [String] {
+    var values = [options.accountEmail]
+
+    if let userEmail = options.userEmail {
+        values.append(userEmail)
+    }
+
+    return values
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        .filter { !$0.isEmpty }
+}
+
+func isCurrentUser(_ participant: EKParticipant, options: Options) -> Bool {
+    if participant.isCurrentUser {
+        return true
+    }
+
+    guard let key = participantKey(participant) else {
+        return false
+    }
+
+    return accountKeys(options: options).contains { accountKey in
+        key == accountKey || key == "mailto:\(accountKey)" || key.contains(accountKey)
+    }
+}
+
+func eventParticipants(_ event: EKEvent) -> [EKParticipant] {
+    var participants = event.attendees ?? []
+
+    if let organizer = event.organizer {
+        participants.append(organizer)
+    }
+
+    return participants.filter(isPersonLikeParticipant)
+}
+
+func hasParticipantOtherThanCurrentUser(_ event: EKEvent, options: Options) -> Bool {
+    let participants = eventParticipants(event)
+
+    if participants.isEmpty {
+        return false
+    }
+
+    if participants.contains(where: { isCurrentUser($0, options: options) }) {
+        return participants.contains { !isCurrentUser($0, options: options) }
+    }
+
+    let uniqueParticipantKeys = Set(participants.compactMap(participantKey))
+    return uniqueParticipantKeys.count > 1
+}
+
+func isAcceptedByCurrentUser(_ event: EKEvent, options: Options) -> Bool {
+    let participants = eventParticipants(event)
+    let currentParticipants = participants.filter { isCurrentUser($0, options: options) }
+
+    if currentParticipants.isEmpty {
+        return true
+    }
+
+    if let organizer = event.organizer, isCurrentUser(organizer, options: options) {
+        return true
+    }
+
+    return currentParticipants.contains { $0.participantStatus == .accepted }
+}
+
+func shouldImportEvent(_ event: EKEvent, options: Options) -> (Bool, String?) {
+    if !options.includeSoloEvents && !hasParticipantOtherThanCurrentUser(event, options: options) {
+        return (false, "solo")
+    }
+
+    if !options.includeUnacceptedEvents && !isAcceptedByCurrentUser(event, options: options) {
+        return (false, "unaccepted")
+    }
+
+    return (true, nil)
+}
+
 func eventPayload(_ event: EKEvent, calendar: EKCalendar) -> CalendarEventPayload? {
     guard let startDate = event.startDate, let endDate = event.endDate, endDate > startDate else {
         return nil
@@ -199,7 +316,7 @@ func eventPayload(_ event: EKEvent, calendar: EKCalendar) -> CalendarEventPayloa
     )
 }
 
-func fetchEvents(store: EKEventStore, calendar: EKCalendar, options: Options) -> [CalendarEventPayload] {
+func fetchEvents(store: EKEventStore, calendar: EKCalendar, options: Options) -> EventFilterResult {
     let start = Calendar.current.date(
         byAdding: .day,
         value: -options.pastDays,
@@ -216,8 +333,34 @@ func fetchEvents(store: EKEventStore, calendar: EKCalendar, options: Options) ->
         calendars: [calendar]
     )
 
-    return store.events(matching: predicate)
-        .compactMap { eventPayload($0, calendar: calendar) }
+    var events: [CalendarEventPayload] = []
+    var skippedSolo = 0
+    var skippedUnaccepted = 0
+    let matchedEvents = store.events(matching: predicate)
+
+    for event in matchedEvents {
+        let decision = shouldImportEvent(event, options: options)
+
+        if !decision.0 {
+            if decision.1 == "solo" {
+                skippedSolo += 1
+            } else if decision.1 == "unaccepted" {
+                skippedUnaccepted += 1
+            }
+            continue
+        }
+
+        if let payload = eventPayload(event, calendar: calendar) {
+            events.append(payload)
+        }
+    }
+
+    return EventFilterResult(
+        events: events,
+        scanned: matchedEvents.count,
+        skippedSolo: skippedSolo,
+        skippedUnaccepted: skippedUnaccepted
+    )
 }
 
 func postPayload(_ payload: ImportPayload, options: Options) throws {
@@ -272,18 +415,22 @@ func run() throws {
     }
 
     for calendar in calendars {
-        let events = fetchEvents(store: store, calendar: calendar, options: options)
+        let result = fetchEvents(store: store, calendar: calendar, options: options)
         let payload = ImportPayload(
             accountEmail: options.accountEmail,
             calendarExternalId: "macos:\(calendar.calendarIdentifier)",
             calendarName: calendar.title,
-            events: events,
+            events: result.events,
             sourceDisplayName: options.sourceDisplayName,
             userEmail: options.userEmail
         )
 
         try postPayload(payload, options: options)
-        print("Synced \(events.count) events from \(calendar.title)")
+        print(
+            "Synced \(result.events.count) events from \(calendar.title) " +
+            "(scanned \(result.scanned), skipped solo \(result.skippedSolo), " +
+            "skipped unaccepted \(result.skippedUnaccepted))"
+        )
     }
 }
 
