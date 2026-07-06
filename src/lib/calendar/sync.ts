@@ -355,6 +355,8 @@ async function replaceCalendarEvents(
   }
 
   for (const snapshot of snapshots) {
+    const snapshotHash = contentHash(snapshot);
+
     await db
       .insert(calendarEvents)
       .values({
@@ -371,7 +373,7 @@ async function replaceCalendarEvents(
         attendeesSummary: snapshot.attendeesSummary,
         eventUrl: snapshot.eventUrl,
         providerUpdatedAt: snapshot.providerUpdatedAt,
-        contentHash: contentHash(snapshot)
+        contentHash: snapshotHash
       })
       .onConflictDoUpdate({
         target: [
@@ -388,7 +390,7 @@ async function replaceCalendarEvents(
           attendeesSummary: snapshot.attendeesSummary,
           eventUrl: snapshot.eventUrl,
           providerUpdatedAt: snapshot.providerUpdatedAt,
-          contentHash: contentHash(snapshot),
+          contentHash: snapshotHash,
           updatedAt: new Date()
         }
       });
