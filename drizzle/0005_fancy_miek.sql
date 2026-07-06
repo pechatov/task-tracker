@@ -1,1 +1,0 @@
-ALTER TYPE "public"."calendar_provider" ADD VALUE 'local_bridge';

@@ -5,14 +5,22 @@ import type { CSSProperties, KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProjectOption,
-  StreamOption,
-  TaskRow
+  StreamOption
 } from "@/lib/tasks/data";
+
+type TaskContextValue = {
+  projectColor: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  streamColor: string | null;
+  streamId: string | null;
+  streamName: string | null;
+};
 
 type TaskContextPickerProps = {
   projects: ProjectOption[];
   streams: StreamOption[];
-  task?: TaskRow | null;
+  task?: TaskContextValue | null;
 };
 
 function normalizeSearch(value: string) {

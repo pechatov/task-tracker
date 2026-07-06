@@ -25,11 +25,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  Inbox
+  Inbox,
+  Repeat2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { moveTaskToBacklog, scheduleTaskFromCalendar } from "@/app/actions/tasks";
+import { TaskTitle } from "@/components/task-title";
 import type { CalendarItem } from "@/lib/calendar/data";
 import { formatDisplayDate } from "@/lib/date";
 import type { TaskRow } from "@/lib/tasks/data";
@@ -316,6 +318,7 @@ export function CalendarBoard({
               taskId: item.taskId,
               taskSize: item.taskSize,
               taskStatus: item.taskStatus,
+              taskIsRecurring: item.taskIsRecurring,
               taskProjectName: item.taskProjectName,
               taskProjectColor: item.taskProjectColor,
               eventUrl: item.eventUrl,
@@ -559,7 +562,7 @@ export function CalendarBoard({
         onClick={() => router.push(`/calendar?taskId=${task.id}`)}
         onPointerDown={onCalendarTaskPointerDown}
       >
-        <span className="task-title">{task.title}</span>
+        <TaskTitle task={task} />
         <span className="label-row">
           {task.projectName ? (
             <span
@@ -710,10 +713,22 @@ export function CalendarBoard({
                 typeof props.taskProjectColor === "string"
                   ? props.taskProjectColor
                   : "#77736a";
+              const isRecurringTask =
+                props.kind === "task" && props.taskIsRecurring === true;
 
               return (
                 <div className="fc-event-inner-content">
-                  <span className="fc-event-title-text">{arg.event.title}</span>
+                  <span className="fc-event-title-row">
+                    {isRecurringTask ? (
+                      <span
+                        className="calendar-recurring-badge"
+                        title="Повторяющаяся задача"
+                      >
+                        <Repeat2 size={11} />
+                      </span>
+                    ) : null}
+                    <span className="fc-event-title-text">{arg.event.title}</span>
+                  </span>
                   {props.kind === "task" && projectName ? (
                     <span className="label-row calendar-event-labels">
                       <span

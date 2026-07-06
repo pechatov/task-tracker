@@ -75,10 +75,8 @@ export default function RootLayout({
 }>) {
   return (
     <html className={fontClasses} lang="ru" suppressHydrationWarning>
-      <head>
-        <ThemeScript />
-      </head>
       <body suppressHydrationWarning>
+        <ThemeScript />
         <AppShell>{children}</AppShell>
       </body>
     </html>
