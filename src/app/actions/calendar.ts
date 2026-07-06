@@ -193,3 +193,33 @@ export async function toggleConnectedCalendar(formData: FormData) {
 
   revalidateCalendarViews();
 }
+
+export async function updateConnectedCalendarColor(formData: FormData) {
+  const calendarId = getString(formData, "calendarId");
+  const color = (getString(formData, "color") || getString(formData, "customColor"))
+    .toLowerCase();
+
+  if (!calendarId) {
+    throw new Error("Connected calendar id is required");
+  }
+
+  if (!/^#[0-9a-f]{6}$/i.test(color)) {
+    throw new Error("Calendar color must be a hex color");
+  }
+
+  await withDb(async (db) => {
+    const userId = await requireCurrentUserId(db);
+
+    await db
+      .update(connectedCalendars)
+      .set({ color, updatedAt: new Date() })
+      .where(
+        and(
+          eq(connectedCalendars.id, calendarId),
+          eq(connectedCalendars.userId, userId)
+        )
+      );
+  });
+
+  revalidateCalendarViews();
+}

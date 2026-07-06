@@ -13,7 +13,8 @@ import {
   connectYandexCalendar,
   disconnectCalendarSource,
   syncCalendarSourceAction,
-  toggleConnectedCalendar
+  toggleConnectedCalendar,
+  updateConnectedCalendarColor
 } from "@/app/actions/calendar";
 import { FontSelector } from "@/components/font-selector";
 import { ThemeSelector } from "@/components/theme-selector";
@@ -273,33 +274,71 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     <p className="empty-state">Календари еще не найдены.</p>
                   ) : null}
                   {source.calendars.map((calendar) => (
-                    <form
-                      action={toggleConnectedCalendar}
+                    <div
                       className="connected-calendar-row"
                       key={calendar.id}
                     >
-                      <input name="calendarId" type="hidden" value={calendar.id} />
-                      <label>
+                      <form
+                        action={toggleConnectedCalendar}
+                        className="connected-calendar-toggle-form"
+                      >
+                        <input name="calendarId" type="hidden" value={calendar.id} />
+                        <label>
+                          <input
+                            defaultChecked={calendar.isEnabled}
+                            name="isEnabled"
+                            type="checkbox"
+                          />
+                          <span
+                            className="color-dot"
+                            style={
+                              { "--context-color": calendar.color } as CSSProperties
+                            }
+                          />
+                          <span>
+                            {calendar.name}
+                            {calendar.isPrimary ? " · основной" : ""}
+                          </span>
+                        </label>
+                        <button className="secondary-button compact-button" type="submit">
+                          Сохранить
+                        </button>
+                      </form>
+
+                      <form
+                        action={updateConnectedCalendarColor}
+                        className="calendar-color-form"
+                      >
+                        <input name="calendarId" type="hidden" value={calendar.id} />
                         <input
-                          defaultChecked={calendar.isEnabled}
-                          name="isEnabled"
-                          type="checkbox"
+                          aria-label={`Цвет календаря ${calendar.name}`}
+                          className="calendar-color-input"
+                          defaultValue={calendar.color}
+                          name="customColor"
+                          type="color"
                         />
-                        <span
-                          className="color-dot"
-                          style={
-                            { "--context-color": calendar.color } as CSSProperties
-                          }
-                        />
-                        <span>
-                          {calendar.name}
-                          {calendar.isPrimary ? " · основной" : ""}
-                        </span>
-                      </label>
-                      <button className="secondary-button compact-button" type="submit">
-                        Сохранить
-                      </button>
-                    </form>
+                        <div className="calendar-color-swatches">
+                          {data.colorPalette.map((color) => (
+                            <button
+                              aria-label={`Выбрать цвет ${color}`}
+                              className={
+                                color.toLowerCase() === calendar.color.toLowerCase()
+                                  ? "calendar-color-swatch selected"
+                                  : "calendar-color-swatch"
+                              }
+                              key={color}
+                              name="color"
+                              style={{ "--context-color": color } as CSSProperties}
+                              type="submit"
+                              value={color}
+                            />
+                          ))}
+                        </div>
+                        <button className="secondary-button compact-button" type="submit">
+                          Цвет
+                        </button>
+                      </form>
+                    </div>
                   ))}
                 </div>
               </section>

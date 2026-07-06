@@ -724,12 +724,9 @@ export function CalendarBoard({
                       </span>
                     </span>
                   ) : null}
-                  {props.kind === "calendar-event" && props.sourceLabel ? (
-                    <span className="fc-event-source">
-                      {props.sourceLabel}
-                    </span>
+                  {props.eventUrl ? (
+                    <ExternalLink className="fc-event-external-link" size={12} />
                   ) : null}
-                  {props.eventUrl ? <ExternalLink size={12} /> : null}
                 </div>
               );
             }}
