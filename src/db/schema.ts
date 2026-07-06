@@ -40,7 +40,11 @@ export const recurringTaskStatus = pgEnum("recurring_task_status", [
 
 export const calendarProvider = pgEnum("calendar_provider", [
   "microsoft_graph",
-  "yandex_caldav"
+  "yandex_caldav",
+  "exchange_ews",
+  "google_calendar",
+  "browser_session",
+  "local_bridge"
 ]);
 
 export const calendarSourceStatus = pgEnum("calendar_source_status", [

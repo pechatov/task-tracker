@@ -6,12 +6,26 @@ import {
   type EncryptedSecret
 } from "../security/credentials";
 
-export type MicrosoftCalendarCredentials = {
+export type GoogleCalendarCredentials = {
   accessToken: string;
   refreshToken?: string;
   expiresAt?: number;
   scope?: string;
   tokenType?: string;
+};
+
+export type MicrosoftGraphCalendarCredentials = {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  scope?: string;
+  tokenType?: string;
+};
+
+export type ExchangeCalendarCredentials = {
+  password: string;
+  serverUrl: string;
+  username: string;
 };
 
 export type YandexCalendarCredentials = {

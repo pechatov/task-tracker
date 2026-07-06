@@ -2,6 +2,7 @@
 node_modules/
 coverage/
 dist/
+.local/
 tsconfig.tsbuildinfo
 playwright-report/
 test-results/

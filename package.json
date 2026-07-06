@@ -13,6 +13,8 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
+    "macos:calendar-sync": "swift scripts/macos-calendar-bridge/MacosCalendarBridge.swift",
+    "outlook:browser-sync": "tsx src/scripts/outlook-browser-sync.ts",
     "worker:dev": "tsx watch src/worker/index.ts",
     "worker:start": "tsx src/worker/index.ts",
     "user:create": "tsx src/scripts/create-user.ts"
@@ -25,10 +27,10 @@
     "@fullcalendar/interaction": "^6.1.21",
     "@fullcalendar/react": "^6.1.21",
     "@fullcalendar/timegrid": "^6.1.21",
-    "@microsoft/microsoft-graph-client": "^3.0.7",
     "argon2": "^0.44.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
+    "fast-xml-parser": "^5.9.3",
     "ical.js": "^2.2.1",
     "iron-session": "^8.0.4",
     "lucide-react": "^1.22.0",
@@ -49,6 +51,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.9",
+    "playwright": "^1.61.1",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9"

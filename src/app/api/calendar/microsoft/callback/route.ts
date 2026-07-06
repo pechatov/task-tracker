@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
-  createMicrosoftCalendarSource,
   exchangeMicrosoftAuthorizationCode,
   fetchMicrosoftProfile
-} from "@/lib/calendar/sync";
+} from "@/lib/calendar/microsoft";
+import { createMicrosoftCalendarSource } from "@/lib/calendar/sync";
 import { getEnv } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -34,8 +34,7 @@ export async function GET(request: NextRequest) {
   try {
     const credentials = await exchangeMicrosoftAuthorizationCode(code);
     const profile = await fetchMicrosoftProfile(credentials);
-    const accountEmail =
-      profile.mail ?? profile.userPrincipalName ?? user.email;
+    const accountEmail = profile.mail ?? profile.userPrincipalName ?? user.email;
     const displayName = profile.displayName
       ? `Microsoft 365 - ${profile.displayName}`
       : "Microsoft 365";

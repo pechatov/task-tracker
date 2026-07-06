@@ -29,6 +29,13 @@
       "when": 1783198210550,
       "tag": "0003_bumpy_ego",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783371449951,
+      "tag": "0004_short_lady_deathstrike",
+      "breakpoints": true
     }
   ]
 }

@@ -65,6 +65,28 @@ Run the worker in another terminal:
 npm run worker:dev
 ```
 
+## Outlook Web Browser Sync
+
+When Microsoft Graph app registration is unavailable, a local browser-session bridge can reuse an interactive Outlook Web login. It stores the browser profile under `.local/`, waits for you to complete login and MFA in the opened browser window, captures the Microsoft Graph token used by Outlook Web, and imports read-only calendar events into the tracker.
+
+Configure the tracker user email:
+
+```sh
+OUTLOOK_BROWSER_USER_EMAIL=you@example.com npm run outlook:browser-sync
+```
+
+For one manual sync pass:
+
+```sh
+OUTLOOK_BROWSER_USER_EMAIL=you@example.com npm run outlook:browser-sync -- --once
+```
+
+This is a fragile local workaround. If Outlook Web stops issuing a usable Graph token to the page, the bridge will fail and the supported alternatives are Microsoft app registration, Exchange app password/EWS, or an ICS/CalDAV feed.
+
+## macOS Calendar Bridge
+
+If Exchange events are already visible in Apple Calendar, use the macOS EventKit bridge instead of browser-session scraping. Setup and production launchd instructions live in [docs/macos-calendar-bridge.md](./docs/macos-calendar-bridge.md).
+
 ## Checks
 
 ```sh

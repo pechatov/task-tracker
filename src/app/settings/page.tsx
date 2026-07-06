@@ -9,10 +9,12 @@ import {
   Type
 } from "lucide-react";
 import {
+  connectExchangeCalendar,
   connectYandexCalendar,
   disconnectCalendarSource,
   syncCalendarSourceAction,
-  toggleConnectedCalendar
+  toggleConnectedCalendar,
+  updateConnectedCalendarColor
 } from "@/app/actions/calendar";
 import { FontSelector } from "@/components/font-selector";
 import { ThemeSelector } from "@/components/theme-selector";
@@ -25,6 +27,7 @@ export const dynamic = "force-dynamic";
 type SettingsPageProps = {
   searchParams: Promise<{
     calendarError?: string | string[];
+    calendarErrorDetail?: string | string[];
     calendarStatus?: string | string[];
   }>;
 };
@@ -58,10 +61,34 @@ function getCalendarMessage(params: Awaited<SettingsPageProps["searchParams"]>) 
     };
   }
 
+  if (error === "google_not_configured") {
+    return {
+      className: "settings-message error",
+      text: "Google OAuth не настроен в переменных окружения."
+    };
+  }
+
   if (error === "microsoft_not_configured") {
     return {
       className: "settings-message error",
       text: "Microsoft OAuth не настроен в переменных окружения."
+    };
+  }
+
+  if (error === "microsoft_callback" || error === "microsoft_state") {
+    return {
+      className: "settings-message error",
+      text: "Не удалось завершить подключение Microsoft 365. Попробуйте еще раз."
+    };
+  }
+
+  if (error === "connect") {
+    const detail = getFirst(params.calendarErrorDetail);
+    return {
+      className: "settings-message error",
+      text: detail
+        ? `Не удалось подключить календарь: ${detail}`
+        : "Не удалось подключить календарь. Проверьте доступы и попробуйте еще раз."
     };
   }
 
@@ -101,8 +128,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
           <div className="settings-row">
             <div>
-              <strong>Microsoft 365 / Exchange</strong>
-              <p>Read-only sync, окно берется из настроек синхронизации</p>
+              <strong>Microsoft 365</strong>
+              <p>OAuth в браузере, поддерживает корпоративный MFA и одноразовый код</p>
             </div>
             {data.isMicrosoftConfigured ? (
               <a className="secondary-button" href="/api/calendar/microsoft/start">
@@ -119,6 +146,57 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </a>
             )}
           </div>
+
+          <div className="settings-row">
+            <div>
+              <strong>Google Календарь</strong>
+              <p>Read-only sync, окно берется из настроек синхронизации</p>
+            </div>
+            {data.isGoogleConfigured ? (
+              <a className="secondary-button" href="/api/calendar/google/start">
+                <LinkIcon size={16} />
+                Подключить
+              </a>
+            ) : (
+              <a
+                className="secondary-button"
+                href="/settings?calendarError=google_not_configured"
+              >
+                <LinkIcon size={16} />
+                Подключить
+              </a>
+            )}
+          </div>
+
+          <form action={connectExchangeCalendar} className="settings-form">
+            <div className="settings-form-heading">
+              <div>
+                <strong>Exchange</strong>
+                <p>EWS Basic Auth для серверов без MFA или с паролем приложения</p>
+              </div>
+              <CalendarCheck2 size={18} />
+            </div>
+            <label className="field full-width">
+              Адрес сервера
+              <input
+                name="serverUrl"
+                placeholder="https://mail.example.com"
+                required
+                type="text"
+              />
+            </label>
+            <label className="field">
+              Логин
+              <input name="username" required type="text" />
+            </label>
+            <label className="field">
+              Пароль
+              <input name="password" required type="password" />
+            </label>
+            <button className="primary-button full-width" type="submit">
+              Подключить Exchange
+            </button>
+          </form>
 
           <form action={connectYandexCalendar} className="settings-form">
             <div className="settings-form-heading">
@@ -196,33 +274,71 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     <p className="empty-state">Календари еще не найдены.</p>
                   ) : null}
                   {source.calendars.map((calendar) => (
-                    <form
-                      action={toggleConnectedCalendar}
+                    <div
                       className="connected-calendar-row"
                       key={calendar.id}
                     >
-                      <input name="calendarId" type="hidden" value={calendar.id} />
-                      <label>
+                      <form
+                        action={toggleConnectedCalendar}
+                        className="connected-calendar-toggle-form"
+                      >
+                        <input name="calendarId" type="hidden" value={calendar.id} />
+                        <label>
+                          <input
+                            defaultChecked={calendar.isEnabled}
+                            name="isEnabled"
+                            type="checkbox"
+                          />
+                          <span
+                            className="color-dot"
+                            style={
+                              { "--context-color": calendar.color } as CSSProperties
+                            }
+                          />
+                          <span>
+                            {calendar.name}
+                            {calendar.isPrimary ? " · основной" : ""}
+                          </span>
+                        </label>
+                        <button className="secondary-button compact-button" type="submit">
+                          Сохранить
+                        </button>
+                      </form>
+
+                      <form
+                        action={updateConnectedCalendarColor}
+                        className="calendar-color-form"
+                      >
+                        <input name="calendarId" type="hidden" value={calendar.id} />
                         <input
-                          defaultChecked={calendar.isEnabled}
-                          name="isEnabled"
-                          type="checkbox"
+                          aria-label={`Цвет календаря ${calendar.name}`}
+                          className="calendar-color-input"
+                          defaultValue={calendar.color}
+                          name="customColor"
+                          type="color"
                         />
-                        <span
-                          className="color-dot"
-                          style={
-                            { "--context-color": calendar.color } as CSSProperties
-                          }
-                        />
-                        <span>
-                          {calendar.name}
-                          {calendar.isPrimary ? " · основной" : ""}
-                        </span>
-                      </label>
-                      <button className="secondary-button compact-button" type="submit">
-                        Сохранить
-                      </button>
-                    </form>
+                        <div className="calendar-color-swatches">
+                          {data.colorPalette.map((color) => (
+                            <button
+                              aria-label={`Выбрать цвет ${color}`}
+                              className={
+                                color.toLowerCase() === calendar.color.toLowerCase()
+                                  ? "calendar-color-swatch selected"
+                                  : "calendar-color-swatch"
+                              }
+                              key={color}
+                              name="color"
+                              style={{ "--context-color": color } as CSSProperties}
+                              type="submit"
+                              value={color}
+                            />
+                          ))}
+                        </div>
+                        <button className="secondary-button compact-button" type="submit">
+                          Цвет
+                        </button>
+                      </form>
+                    </div>
                   ))}
                 </div>
               </section>

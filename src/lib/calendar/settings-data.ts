@@ -4,8 +4,10 @@ import { calendarSources, connectedCalendars } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
 import {
   getCalendarProviderLabel,
-  getMicrosoftCalendarConfigured
+  getGoogleCalendarConfigured
 } from "@/lib/calendar/sync";
+import { getMicrosoftCalendarConfigured } from "@/lib/calendar/microsoft";
+import { CONTEXT_COLOR_PALETTE } from "@/lib/context/colors";
 
 export type CalendarSettingsSource = {
   id: string;
@@ -26,6 +28,8 @@ export type CalendarSettingsCalendar = {
 };
 
 export type CalendarSettingsData = {
+  colorPalette: string[];
+  isGoogleConfigured: boolean;
   isMicrosoftConfigured: boolean;
   sources: CalendarSettingsSource[];
 };
@@ -65,6 +69,8 @@ export async function getCalendarSettingsData(): Promise<CalendarSettingsData> {
       .orderBy(asc(connectedCalendars.name));
 
     return {
+      colorPalette: CONTEXT_COLOR_PALETTE,
+      isGoogleConfigured: getGoogleCalendarConfigured(),
       isMicrosoftConfigured: getMicrosoftCalendarConfigured(),
       sources: sourceRows.map((source) => ({
         id: source.id,

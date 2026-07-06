@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className={active ? "nav-link active" : "nav-link"}
                 href={item.href}
               >
-                <Icon size={18} />
+                <Icon size={18} suppressHydrationWarning />
                 {item.label}
               </Link>
             );
@@ -62,7 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <form action="/logout" method="post" className="logout-form">
           <button className="nav-link logout-button" type="submit">
-            <LogOut size={18} />
+            <LogOut size={18} suppressHydrationWarning />
             Выйти
           </button>
         </form>
@@ -80,14 +80,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               className={active ? "bottom-link active" : "bottom-link"}
               href={item.href}
             >
-              <Icon size={18} />
+              <Icon size={18} suppressHydrationWarning />
               <span>{item.label}</span>
             </Link>
           );
         })}
         <form action="/logout" method="post">
           <button className="bottom-link logout-button" type="submit">
-            <LogOut size={18} />
+            <LogOut size={18} suppressHydrationWarning />
             <span>Выход</span>
           </button>
         </form>

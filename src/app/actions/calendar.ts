@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { withDb } from "@/db/with-db";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
 import {
+  createExchangeCalendarSource,
   createYandexCalendarSource,
   syncCalendarSource
 } from "@/lib/calendar/sync";
@@ -25,6 +27,11 @@ function revalidateCalendarViews() {
   revalidatePath("/");
 }
 
+function connectErrorDetail(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  return encodeURIComponent(message.slice(0, 200));
+}
+
 export async function connectYandexCalendar(formData: FormData) {
   const serverUrl = getString(formData, "serverUrl") || "https://caldav.yandex.ru";
   const username = getString(formData, "username");
@@ -35,15 +42,56 @@ export async function connectYandexCalendar(formData: FormData) {
   }
 
   const userId = await withDb((db) => requireCurrentUserId(db));
+  let errorDetail: string | null = null;
 
-  await createYandexCalendarSource({
-    password,
-    serverUrl,
-    userId,
-    username
-  });
+  try {
+    await createYandexCalendarSource({
+      password,
+      serverUrl,
+      userId,
+      username
+    });
+  } catch (error) {
+    errorDetail = connectErrorDetail(error);
+  }
+
+  if (errorDetail) {
+    redirect(`/settings?calendarError=connect&calendarErrorDetail=${errorDetail}`);
+  }
 
   revalidateCalendarViews();
+  redirect("/settings?calendarStatus=connected");
+}
+
+export async function connectExchangeCalendar(formData: FormData) {
+  const serverUrl = getString(formData, "serverUrl");
+  const username = getString(formData, "username");
+  const password = getString(formData, "password");
+
+  if (!serverUrl || !username || !password) {
+    throw new Error("Exchange server URL, username and password are required");
+  }
+
+  const userId = await withDb((db) => requireCurrentUserId(db));
+  let errorDetail: string | null = null;
+
+  try {
+    await createExchangeCalendarSource({
+      password,
+      serverUrl,
+      userId,
+      username
+    });
+  } catch (error) {
+    errorDetail = connectErrorDetail(error);
+  }
+
+  if (errorDetail) {
+    redirect(`/settings?calendarError=connect&calendarErrorDetail=${errorDetail}`);
+  }
+
+  revalidateCalendarViews();
+  redirect("/settings?calendarStatus=connected");
 }
 
 export async function syncCalendarSourceAction(formData: FormData) {
@@ -142,6 +190,36 @@ export async function toggleConnectedCalendar(formData: FormData) {
   if (isEnabled) {
     await syncCalendarSource(sourceId);
   }
+
+  revalidateCalendarViews();
+}
+
+export async function updateConnectedCalendarColor(formData: FormData) {
+  const calendarId = getString(formData, "calendarId");
+  const color = (getString(formData, "color") || getString(formData, "customColor"))
+    .toLowerCase();
+
+  if (!calendarId) {
+    throw new Error("Connected calendar id is required");
+  }
+
+  if (!/^#[0-9a-f]{6}$/i.test(color)) {
+    throw new Error("Calendar color must be a hex color");
+  }
+
+  await withDb(async (db) => {
+    const userId = await requireCurrentUserId(db);
+
+    await db
+      .update(connectedCalendars)
+      .set({ color, updatedAt: new Date() })
+      .where(
+        and(
+          eq(connectedCalendars.id, calendarId),
+          eq(connectedCalendars.userId, userId)
+        )
+      );
+  });
 
   revalidateCalendarViews();
 }
