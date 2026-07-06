@@ -85,41 +85,7 @@ This is a fragile local workaround. If Outlook Web stops issuing a usable Graph 
 
 ## macOS Calendar Bridge
 
-If Exchange events are already visible in Apple Calendar, use the macOS EventKit bridge instead of browser-session scraping. Configure the server with a long random import token:
-
-```sh
-LOCAL_CALENDAR_IMPORT_TOKEN=<long random token>
-LOCAL_CALENDAR_IMPORT_USER_EMAIL=you@example.com
-```
-
-On the Mac, run a one-off calendar list:
-
-```sh
-TASK_TRACKER_BASE_URL=http://localhost:3001 \
-LOCAL_CALENDAR_IMPORT_TOKEN=<same token> \
-TASK_TRACKER_USER_EMAIL=you@example.com \
-MACOS_CALENDAR_LIST=1 \
-swift scripts/macos-calendar-bridge/MacosCalendarBridge.swift
-```
-
-Then sync all matching calendars:
-
-```sh
-TASK_TRACKER_BASE_URL=http://localhost:3001 \
-LOCAL_CALENDAR_IMPORT_TOKEN=<same token> \
-TASK_TRACKER_USER_EMAIL=you@example.com \
-MACOS_CALENDAR_ACCOUNT_EMAIL=work@example.com \
-MACOS_CALENDAR_NAME_CONTAINS=Work \
-swift scripts/macos-calendar-bridge/MacosCalendarBridge.swift
-```
-
-By default the bridge skips events where the current user has not accepted the invite, events where the current user cannot be identified among attendees/organizer, and events without any participant other than the current user. Set `MACOS_CALENDAR_INCLUDE_UNACCEPTED=1` or `MACOS_CALENDAR_INCLUDE_SOLO_EVENTS=1` to disable those filters for a run. Set `MACOS_CALENDAR_DEBUG_FILTERS=1` to print keep/skip decisions while debugging EventKit participant data.
-
-For periodic sync, adapt `scripts/macos-calendar-bridge/com.tasktracker.calendar-bridge.plist.example`, put it into `~/Library/LaunchAgents/`, then run:
-
-```sh
-launchctl load ~/Library/LaunchAgents/com.tasktracker.calendar-bridge.plist
-```
+If Exchange events are already visible in Apple Calendar, use the macOS EventKit bridge instead of browser-session scraping. Setup and production launchd instructions live in [docs/macos-calendar-bridge.md](./docs/macos-calendar-bridge.md).
 
 ## Checks
 
