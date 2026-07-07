@@ -65,7 +65,10 @@ const fontClasses = [
 
 export const metadata: Metadata = {
   title: "Task Tracker",
-  description: "Personal daily task and calendar tracker"
+  description: "Personal daily task and calendar tracker",
+  other: {
+    "darkreader-lock": "true"
+  }
 };
 
 export default function RootLayout({

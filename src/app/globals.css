@@ -519,6 +519,13 @@ a {
   min-height: 54px;
 }
 
+.dnd-task-list.drop-hover {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 8px;
+  outline: 1px dashed color-mix(in srgb, var(--accent) 46%, transparent);
+  outline-offset: 4px;
+}
+
 .drag-handle {
   align-items: center;
   background: transparent;
@@ -1153,6 +1160,7 @@ a {
 
 .calendar-scroll-area {
   min-width: 0;
+  position: relative;
 }
 
 .calendar-shell .fc-theme-standard td,
@@ -1223,6 +1231,43 @@ a {
 
 .calendar-shell .fc-event.fc-event-draggable {
   cursor: grab;
+}
+
+.calendar-drop-slot-preview {
+  animation: calendar-slot-preview-pulse 1.1s ease-in-out infinite;
+  background: color-mix(
+    in srgb,
+    var(--calendar-drop-preview-color, var(--accent)) 28%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--calendar-drop-preview-color, var(--accent)) 76%,
+      transparent
+    );
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--surface) 42%, transparent),
+    0 8px 22px rgba(0, 0, 0, 0.16);
+  color: var(--calendar-drop-preview-color, var(--accent));
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  left: 0;
+  min-height: 24px;
+  overflow: hidden;
+  padding: 4px 7px;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  z-index: 25;
+}
+
+.calendar-drop-slot-preview span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar-shell .fc-event-main {
@@ -1981,7 +2026,7 @@ a {
   background: color-mix(in srgb, var(--surface-muted) 42%, var(--surface));
   border: 1px solid var(--line);
   border-radius: 8px;
-  cursor: grab;
+  cursor: pointer;
   display: grid;
   gap: 8px;
   grid-template-columns: 30px minmax(0, 1fr);
@@ -2176,6 +2221,17 @@ a {
   }
 }
 
+@keyframes calendar-slot-preview-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 @keyframes backlog-return-pop {
   0% {
     opacity: 0;
@@ -2256,14 +2312,28 @@ a {
   border-radius: 8px;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 50px;
   padding: 8px 12px;
+}
+
+.project-row:hover {
+  background: var(--surface-muted);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 
 .project-row.completed {
   background: color-mix(in srgb, var(--surface-muted) 66%, var(--surface));
   border-color: color-mix(in srgb, var(--muted) 30%, var(--line));
+}
+
+.project-row-link {
+  align-items: center;
+  color: inherit;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
 }
 
 .project-row-name {
@@ -2286,6 +2356,125 @@ a {
   font-size: 13px;
   height: 24px;
   min-width: 24px;
+}
+
+.project-details-modal {
+  width: min(980px, 100%);
+}
+
+.project-details-body {
+  display: grid;
+  gap: 18px;
+  padding: 0 18px 18px;
+}
+
+.project-details-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  padding-bottom: 16px;
+}
+
+.project-details-heading h2,
+.project-details-heading p {
+  margin: 0;
+}
+
+.project-details-heading h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-details-heading svg {
+  color: var(--accent);
+}
+
+.project-details-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-task-columns {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.project-task-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.project-task-section-header {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  font-weight: 700;
+  justify-content: space-between;
+}
+
+.project-task-section-header > span:first-child {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.project-task-section-header svg {
+  color: var(--accent);
+}
+
+.project-task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.project-task-row {
+  align-items: start;
+  background: color-mix(in srgb, var(--surface-muted) 42%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: inherit;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 56px;
+  padding: 10px 12px;
+}
+
+.project-task-row:hover {
+  background: var(--surface-muted);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.project-task-row.done {
+  background: color-mix(in srgb, var(--surface-muted) 66%, var(--surface));
+}
+
+.project-task-row.done .task-title-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.project-task-status {
+  color: var(--accent);
+  display: inline-flex;
+  margin-top: 1px;
+}
+
+.project-task-row.done .project-task-status {
+  color: var(--success);
+}
+
+.nested-modal-backdrop {
+  background: color-mix(in srgb, var(--background) 36%, transparent);
+  z-index: 60;
 }
 
 .inline-create-form {
@@ -2405,6 +2594,7 @@ a {
   .calendar-layout,
   .calendar-sidebar,
   .layout-grid,
+  .project-task-columns,
   .settings-grid,
   .stream-grid,
   .today-board-row,

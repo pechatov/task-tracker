@@ -6,9 +6,13 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  pointerWithin,
   useSensor,
   useSensors,
+  useDroppable,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragOverEvent,
   type DragStartEvent,
   type UniqueIdentifier
@@ -23,7 +27,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import FullCalendar from "@fullcalendar/react";
 import interactionPlugin, {
-  Draggable,
   type EventDragStartArg,
   type EventDragStopArg,
   type EventReceiveArg,
@@ -39,7 +42,7 @@ import type {
   EventInput,
   DateSelectArg
 } from "@fullcalendar/core";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -66,7 +69,11 @@ import {
 } from "@/app/actions/tasks";
 import { TaskTitle } from "@/components/task-title";
 import type { CalendarItem } from "@/lib/calendar/data";
-import { formatDateInput, formatDisplayDate } from "@/lib/date";
+import {
+  combineDateAndTime,
+  formatDateInput,
+  formatDisplayDate
+} from "@/lib/date";
 import type { TaskRow } from "@/lib/tasks/data";
 import {
   getTaskSizeDurationMinutes,
@@ -91,7 +98,30 @@ type CalendarSidebarList = "backlog" | "overdue";
 
 type CalendarSidebarLists = Record<CalendarSidebarList, TaskRow[]>;
 
+type CalendarDropPreview = {
+  style: CSSProperties;
+  title: string;
+};
+
+type CalendarDropPreviewStyle = CSSProperties & {
+  "--calendar-drop-preview-color": string;
+};
+
 const sidebarListOrder: CalendarSidebarList[] = ["backlog", "overdue"];
+
+const calendarSidebarCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+
+  if (pointerCollisions.length > 0) {
+    const itemCollisions = pointerCollisions.filter(
+      (collision) => !isCalendarSidebarList(collision.id)
+    );
+
+    return itemCollisions.length > 0 ? itemCollisions : pointerCollisions;
+  }
+
+  return closestCenter(args);
+};
 
 function isCalendarSidebarList(
   value: UniqueIdentifier | null | undefined
@@ -172,6 +202,43 @@ function moveTaskWithinSidebarList(
   return {
     ...lists,
     [list]: arrayMove(lists[list], activeIndex, overIndex)
+  };
+}
+
+function moveTaskBetweenSidebarLists(
+  lists: CalendarSidebarLists,
+  sourceList: CalendarSidebarList,
+  targetList: CalendarSidebarList,
+  activeId: string,
+  overId: UniqueIdentifier
+) {
+  const activeTask = lists[sourceList].find((task) => task.id === activeId);
+
+  if (!activeTask) {
+    return lists;
+  }
+
+  const sourceTasks = lists[sourceList].filter((task) => task.id !== activeId);
+  const targetTasks = lists[targetList].filter((task) => task.id !== activeId);
+  const overIndex = isCalendarSidebarList(overId)
+    ? targetTasks.length
+    : targetTasks.findIndex((task) => task.id === String(overId));
+  const insertIndex = overIndex < 0 ? targetTasks.length : overIndex;
+  const movedTask = {
+    ...activeTask,
+    dueDate: null,
+    timeBlockEnd: null,
+    timeBlockStart: null
+  };
+
+  return {
+    ...lists,
+    [sourceList]: sourceTasks,
+    [targetList]: [
+      ...targetTasks.slice(0, insertIndex),
+      movedTask,
+      ...targetTasks.slice(insertIndex)
+    ]
   };
 }
 
@@ -325,6 +392,185 @@ function getTaskScheduleFormData(
   return formData;
 }
 
+function getDragPoint(event: DragEndEvent | DragMoveEvent) {
+  const activator = event.activatorEvent;
+
+  if (
+    "clientX" in activator &&
+    "clientY" in activator &&
+    typeof activator.clientX === "number" &&
+    typeof activator.clientY === "number"
+  ) {
+    return {
+      x: activator.clientX + event.delta.x,
+      y: activator.clientY + event.delta.y
+    };
+  }
+
+  return null;
+}
+
+function getDragEndPoint(event: DragEndEvent) {
+  return getDragPoint(event);
+}
+
+function findElementContainingPoint<T extends HTMLElement>(
+  root: HTMLElement,
+  selector: string,
+  x: number,
+  y: number
+) {
+  return (
+    Array.from(root.querySelectorAll<T>(selector)).find((element) => {
+      const rect = element.getBoundingClientRect();
+
+      return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    }) ?? null
+  );
+}
+
+function findElementCrossingPoint<T extends HTMLElement>(
+  root: HTMLElement,
+  selector: string,
+  x: number,
+  y: number
+) {
+  return (
+    Array.from(root.querySelectorAll<T>(selector)).find((element) => {
+      const rect = element.getBoundingClientRect();
+
+      return (
+        x >= rect.left &&
+        x <= rect.right &&
+        y >= rect.top &&
+        y <= rect.bottom
+      );
+    }) ?? null
+  );
+}
+
+function getCalendarDropFormData(
+  root: HTMLElement,
+  point: { x: number; y: number },
+  task: TaskRow
+) {
+  const allDayCell = findElementContainingPoint<HTMLElement>(
+    root,
+    ".fc-daygrid-day[data-date]",
+    point.x,
+    point.y
+  );
+
+  if (allDayCell?.dataset.date) {
+    const formData = new FormData();
+    formData.set("taskId", task.id);
+    formData.set("isAllDay", "true");
+    formData.set("wasAllDay", "true");
+    formData.set("startsAt", allDayCell.dataset.date);
+    formData.set("endsAt", addDateDays(allDayCell.dataset.date, 1));
+    return formData;
+  }
+
+  const timeColumn = findElementContainingPoint<HTMLElement>(
+    root,
+    ".fc-timegrid-col[data-date]",
+    point.x,
+    point.y
+  );
+  const timeSlot = findElementCrossingPoint<HTMLElement>(
+    root,
+    ".fc-timegrid-slot[data-time]",
+    point.x,
+    point.y
+  );
+  const date = timeColumn?.dataset.date;
+  const time = timeSlot?.dataset.time;
+
+  if (!date || !time) {
+    return null;
+  }
+
+  const start = combineDateAndTime(date, time.slice(0, 5));
+
+  if (Number.isNaN(start.getTime())) {
+    return null;
+  }
+
+  const end = addMinutes(start, getTaskSizeDurationMinutes(task.size));
+  const formData = new FormData();
+  formData.set("taskId", task.id);
+  formData.set("isAllDay", "false");
+  formData.set("wasAllDay", "true");
+  formData.set("startsAt", start.toISOString());
+  formData.set("endsAt", end.toISOString());
+
+  return formData;
+}
+
+function getCalendarDropPreview(
+  root: HTMLElement,
+  point: { x: number; y: number },
+  task: TaskRow
+): CalendarDropPreview | null {
+  const rootRect = root.getBoundingClientRect();
+  const previewColor = task.projectColor ?? task.streamColor ?? "#2d7dd2";
+  const allDayCell = findElementContainingPoint<HTMLElement>(
+    root,
+    ".fc-daygrid-day[data-date]",
+    point.x,
+    point.y
+  );
+
+  if (allDayCell) {
+    const frame = allDayCell.querySelector<HTMLElement>(".fc-daygrid-day-frame");
+    const rect = (frame ?? allDayCell).getBoundingClientRect();
+
+    return {
+      title: task.title,
+      style: {
+        height: rect.height,
+        left: rect.left - rootRect.left + root.scrollLeft,
+        top: rect.top - rootRect.top + root.scrollTop,
+        width: rect.width,
+        "--calendar-drop-preview-color": previewColor
+      } as CalendarDropPreviewStyle
+    };
+  }
+
+  const timeColumn = findElementContainingPoint<HTMLElement>(
+    root,
+    ".fc-timegrid-col[data-date]",
+    point.x,
+    point.y
+  );
+  const timeSlot = findElementCrossingPoint<HTMLElement>(
+    root,
+    ".fc-timegrid-slot[data-time]",
+    point.x,
+    point.y
+  );
+
+  if (!timeColumn || !timeSlot) {
+    return null;
+  }
+
+  const columnRect = timeColumn.getBoundingClientRect();
+  const slotRect = timeSlot.getBoundingClientRect();
+  const slotMinutes = 30;
+  const durationSlots = getTaskSizeDurationMinutes(task.size) / slotMinutes;
+
+  return {
+    title: task.title,
+    style: {
+      height: Math.max(slotRect.height, slotRect.height * durationSlots),
+      left: columnRect.left - rootRect.left + root.scrollLeft + 2,
+      top: slotRect.top - rootRect.top + root.scrollTop,
+      width: Math.max(0, columnRect.width - 4),
+      "--calendar-drop-preview-color": previewColor
+    } as CalendarDropPreviewStyle
+  };
+}
+
 function CalendarTaskDragPreview({ task }: { task: TaskRow }) {
   return (
     <div className="calendar-backlog-item calendar-sortable-task dnd-drag-preview">
@@ -338,16 +584,38 @@ function CalendarTaskDragPreview({ task }: { task: TaskRow }) {
   );
 }
 
+function SidebarDropZone({
+  children,
+  list
+}: {
+  children: ReactNode;
+  list: CalendarSidebarList;
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: list,
+    data: { list }
+  });
+
+  return (
+    <div
+      className={["task-list dnd-task-list", isOver ? "drop-hover" : ""]
+        .filter(Boolean)
+        .join(" ")}
+      ref={setNodeRef}
+    >
+      {children}
+    </div>
+  );
+}
+
 function SortableCalendarTask({
   list,
   onOpenTask,
-  onTaskPointerDown,
   showDueDate = false,
   task
 }: {
   list: CalendarSidebarList;
   onOpenTask: (taskId: string) => void;
-  onTaskPointerDown: (event: React.PointerEvent) => void;
   showDueDate?: boolean;
   task: TaskRow;
 }) {
@@ -363,7 +631,6 @@ function SortableCalendarTask({
     id: task.id,
     data: { list }
   });
-  const color = task.projectColor ?? task.streamColor ?? "#2d7dd2";
   const setRowRef = useCallback(
     (node: HTMLElement | null) => {
       setNodeRef(node);
@@ -385,13 +652,7 @@ function SortableCalendarTask({
       ]
         .filter(Boolean)
         .join(" ")}
-      data-color={color}
-      data-duration-minutes={getTaskSizeDurationMinutes(task.size)}
-      data-task-id={task.id}
-      data-task-size={task.size}
-      data-title={task.title}
       onClick={() => onOpenTask(task.id)}
-      onPointerDown={onTaskPointerDown}
       ref={setRowRef}
       style={style}
       {...attributes}
@@ -429,7 +690,7 @@ export function CalendarBoard({
 }: CalendarBoardProps) {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar | null>(null);
-  const taskSourceRef = useRef<HTMLElement | null>(null);
+  const calendarDropRootRef = useRef<HTMLDivElement | null>(null);
   const backlogPanelRef = useRef<HTMLElement | null>(null);
   const returningTaskTimerRef = useRef<number | null>(null);
   const initialSidebarLists = useMemo(
@@ -443,6 +704,8 @@ export function CalendarBoard({
   const [title, setTitle] = useState("");
   const [dragSource, setDragSource] = useState<DragSource>("none");
   const [isBacklogHovered, setIsBacklogHovered] = useState(false);
+  const [calendarDropPreview, setCalendarDropPreview] =
+    useState<CalendarDropPreview | null>(null);
   const [returningTaskTitle, setReturningTaskTitle] = useState<string | null>(null);
   const [activeSidebarTask, setActiveSidebarTask] = useState<TaskRow | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -498,34 +761,6 @@ export function CalendarBoard({
     document.addEventListener("mousemove", onMouseMove);
     return () => document.removeEventListener("mousemove", onMouseMove);
   }, [dragSource]);
-
-  useEffect(() => {
-    if (!taskSourceRef.current) {
-      return;
-    }
-
-    const draggable = new Draggable(taskSourceRef.current, {
-      itemSelector: ".calendar-backlog-item",
-      eventData: (element) => ({
-        title: element.dataset.title ?? "",
-        duration: {
-          minutes: Number(element.dataset.durationMinutes) || 60
-        },
-        backgroundColor: element.dataset.color,
-        borderColor: element.dataset.color,
-        textColor: "#ffffff",
-        classNames: ["calendar-task-event"],
-        extendedProps: {
-          kind: "task",
-          taskId: element.dataset.taskId,
-          taskSize: element.dataset.taskSize,
-          taskStatus: "open"
-        }
-      })
-    });
-
-    return () => draggable.destroy();
-  }, []);
 
   const events = useMemo<EventInput[]>(() => {
     const isMonthView = view === "dayGridMonth";
@@ -680,30 +915,6 @@ export function CalendarBoard({
     scheduleChangedTask(arg.event, false, arg.revert);
   }
 
-  function onCalendarTaskPointerDown(event: React.PointerEvent) {
-    const startX = event.clientX;
-    const startY = event.clientY;
-
-    function onPointerMove(moveEvent: PointerEvent) {
-      if (
-        Math.abs(moveEvent.clientX - startX) +
-          Math.abs(moveEvent.clientY - startY) >
-        6
-      ) {
-        setDragSource("backlog");
-      }
-    }
-
-    function onPointerUp() {
-      document.removeEventListener("pointermove", onPointerMove);
-      document.removeEventListener("pointerup", onPointerUp);
-      setDragSource("none");
-    }
-
-    document.addEventListener("pointermove", onPointerMove);
-    document.addEventListener("pointerup", onPointerUp);
-  }
-
   function onEventDragStart(arg: EventDragStartArg) {
     if (arg.event.extendedProps.kind === "task") {
       setDragSource("calendar");
@@ -815,7 +1026,26 @@ export function CalendarBoard({
 
     dragStartSidebarListsRef.current = currentLists;
     activeOriginListRef.current = sourceList;
+    setDragSource(sourceList ? "backlog" : "none");
     setActiveSidebarTask(findSidebarTask(currentLists, taskId));
+  }
+
+  function onSidebarDragMove(event: DragMoveEvent) {
+    const taskId = String(event.active.id);
+    const point = getDragPoint(event);
+    const task =
+      activeSidebarTask ??
+      (dragStartSidebarListsRef.current
+        ? findSidebarTask(dragStartSidebarListsRef.current, taskId)
+        : null);
+    const root = calendarDropRootRef.current;
+
+    if (!point || !task || !root) {
+      setCalendarDropPreview(null);
+      return;
+    }
+
+    setCalendarDropPreview(getCalendarDropPreview(root, point, task));
   }
 
   function onSidebarDragOver(event: DragOverEvent) {
@@ -830,7 +1060,21 @@ export function CalendarBoard({
       const sourceList = findSidebarList(current, activeId);
       const targetList = findSidebarList(current, overId);
 
-      if (!sourceList || sourceList !== targetList) {
+      if (!sourceList || !targetList) {
+        return current;
+      }
+
+      if (sourceList === "overdue" && targetList === "backlog") {
+        return moveTaskBetweenSidebarLists(
+          current,
+          sourceList,
+          targetList,
+          activeId,
+          overId
+        );
+      }
+
+      if (sourceList !== targetList) {
         return current;
       }
 
@@ -848,6 +1092,8 @@ export function CalendarBoard({
 
   function clearSidebarDragState() {
     setActiveSidebarTask(null);
+    setDragSource("none");
+    setCalendarDropPreview(null);
     dragStartSidebarListsRef.current = null;
     activeOriginListRef.current = null;
   }
@@ -870,13 +1116,78 @@ export function CalendarBoard({
     });
   }
 
+  function persistOverdueTaskToBacklog(
+    taskId: string,
+    finalLists: CalendarSidebarLists,
+    fallbackLists: CalendarSidebarLists
+  ) {
+    const moveFormData = new FormData();
+    moveFormData.set("taskId", taskId);
+
+    const reorderFormData = new FormData();
+    reorderFormData.set("list", "backlog");
+    reorderFormData.set(
+      "taskIds",
+      JSON.stringify(normalizeIds(finalLists.backlog))
+    );
+
+    startTransition(async () => {
+      try {
+        await moveTaskToBacklog(moveFormData);
+        await reorderCalendarTaskList(reorderFormData);
+        router.refresh();
+      } catch {
+        setSidebarLists(fallbackLists);
+      }
+    });
+  }
+
+  function persistSidebarTaskToCalendar(
+    formData: FormData,
+    taskId: string,
+    fallbackLists: CalendarSidebarLists
+  ) {
+    startTransition(async () => {
+      try {
+        await scheduleTaskFromCalendar(formData);
+        removeSidebarTask(taskId);
+        router.refresh();
+      } catch {
+        setSidebarLists(fallbackLists);
+      }
+    });
+  }
+
   function onSidebarDragEnd(event: DragEndEvent) {
     const taskId = String(event.active.id);
     const originLists = dragStartSidebarListsRef.current;
     const originList = activeOriginListRef.current;
     const over = event.over;
 
-    if (!over || !originLists || !originList) {
+    if (!originLists || !originList) {
+      restoreDragStartSidebarLists();
+      clearSidebarDragState();
+      return;
+    }
+
+    const dragEndPoint = getDragEndPoint(event);
+    const activeTask = findSidebarTask(originLists, taskId);
+    const calendarDropFormData =
+      dragEndPoint && activeTask && calendarDropRootRef.current
+        ? getCalendarDropFormData(
+            calendarDropRootRef.current,
+            dragEndPoint,
+            activeTask
+          )
+        : null;
+
+    if (calendarDropFormData) {
+      persistSidebarTaskToCalendar(calendarDropFormData, taskId, originLists);
+      clearSidebarDragState();
+      return;
+    }
+
+    if (!over) {
       restoreDragStartSidebarLists();
       clearSidebarDragState();
       return;
@@ -885,6 +1196,34 @@ export function CalendarBoard({
     let finalLists = sidebarListsRef.current;
     const destinationList = findSidebarList(finalLists, taskId);
     const overList = findSidebarList(finalLists, over.id);
+
+    if (
+      originList === "overdue" &&
+      overList === "backlog"
+    ) {
+      if (destinationList !== "backlog") {
+        finalLists = moveTaskBetweenSidebarLists(
+          finalLists,
+          "overdue",
+          "backlog",
+          taskId,
+          over.id
+        );
+        setSidebarLists(finalLists);
+      } else if (!isCalendarSidebarList(over.id)) {
+        finalLists = moveTaskWithinSidebarList(
+          finalLists,
+          "backlog",
+          taskId,
+          over.id
+        );
+        setSidebarLists(finalLists);
+      }
+
+      persistOverdueTaskToBacklog(taskId, finalLists, originLists);
+      clearSidebarDragState();
+      return;
+    }
 
     if (!destinationList || destinationList !== originList || overList !== originList) {
       restoreDragStartSidebarLists();
@@ -993,7 +1332,15 @@ export function CalendarBoard({
               : "Бросьте на строку «Весь день», чтобы запланировать задачу на день без конкретного времени"}
           </div>
         ) : null}
-        <div className="calendar-scroll-area">
+        <div className="calendar-scroll-area" ref={calendarDropRootRef}>
+          {calendarDropPreview ? (
+            <div
+              className="calendar-drop-slot-preview"
+              style={calendarDropPreview.style}
+            >
+              <span>{calendarDropPreview.title}</span>
+            </div>
+          ) : null}
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -1083,14 +1430,16 @@ export function CalendarBoard({
       </section>
 
       <DndContext
-        collisionDetection={closestCenter}
+        collisionDetection={calendarSidebarCollisionDetection}
+        id="calendar-sidebar-dnd"
         sensors={sensors}
         onDragCancel={onSidebarDragCancel}
         onDragEnd={onSidebarDragEnd}
+        onDragMove={onSidebarDragMove}
         onDragOver={onSidebarDragOver}
         onDragStart={onSidebarDragStart}
       >
-        <aside className="calendar-sidebar" ref={taskSourceRef}>
+        <aside className="calendar-sidebar">
           <section
             className={[
               "panel calendar-backlog",
@@ -1124,7 +1473,7 @@ export function CalendarBoard({
               items={sidebarLists.backlog.map((task) => task.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="task-list dnd-task-list">
+              <SidebarDropZone list="backlog">
                 {sidebarLists.backlog.length === 0 ? (
                   <p className="empty-state">Все задачи распланированы.</p>
                 ) : null}
@@ -1133,11 +1482,10 @@ export function CalendarBoard({
                     key={task.id}
                     list="backlog"
                     onOpenTask={(taskId) => router.push(`/calendar?taskId=${taskId}`)}
-                    onTaskPointerDown={onCalendarTaskPointerDown}
                     task={task}
                   />
                 ))}
-              </div>
+              </SidebarDropZone>
             </SortableContext>
           </section>
 
@@ -1152,7 +1500,7 @@ export function CalendarBoard({
               items={sidebarLists.overdue.map((task) => task.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="task-list dnd-task-list">
+              <SidebarDropZone list="overdue">
                 {sidebarLists.overdue.length === 0 ? (
                   <p className="empty-state">Нет задач из прошлых недель.</p>
                 ) : null}
@@ -1161,12 +1509,11 @@ export function CalendarBoard({
                     key={task.id}
                     list="overdue"
                     onOpenTask={(taskId) => router.push(`/calendar?taskId=${taskId}`)}
-                    onTaskPointerDown={onCalendarTaskPointerDown}
                     showDueDate
                     task={task}
                   />
                 ))}
-              </div>
+              </SidebarDropZone>
             </SortableContext>
           </section>
         </aside>
