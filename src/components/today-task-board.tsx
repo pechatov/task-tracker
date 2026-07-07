@@ -653,6 +653,7 @@ export function TodayTaskBoard({
   return (
     <DndContext
       collisionDetection={taskBoardCollisionDetection}
+      id="today-task-board-dnd"
       sensors={sensors}
       onDragCancel={onDragCancel}
       onDragEnd={onDragEnd}

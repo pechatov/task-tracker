@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { and, desc, eq, isNull, lt } from "drizzle-orm";
 import { projects, recurringTasks, streams, tasks } from "@/db/schema";
@@ -70,8 +71,25 @@ function getPositiveInt(formData: FormData, name: string, fallback: number) {
   return value;
 }
 
-function getReturnTo(formData: FormData) {
-  return getString(formData, "returnTo") === "/calendar" ? "/calendar" : "/";
+type TaskReturnTo = "/" | "/calendar" | `/projects?projectId=${string}`;
+
+function redirectTo(returnTo: TaskReturnTo): never {
+  redirect(returnTo as Route);
+}
+
+function getReturnTo(formData: FormData): TaskReturnTo {
+  const value = getString(formData, "returnTo");
+
+  if (value === "/calendar") {
+    return value;
+  }
+
+  const projectMatch =
+    /^\/projects\?projectId=[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.exec(
+      value
+    );
+
+  return projectMatch ? (value as `/projects?projectId=${string}`) : "/";
 }
 
 function getDueDate(formData: FormData) {
@@ -327,9 +345,10 @@ export async function createTask(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/calendar");
+  revalidatePath("/projects");
 
-  if (returnTo === "/calendar") {
-    redirect(returnTo);
+  if (returnTo !== "/") {
+    redirectTo(returnTo);
   }
 }
 
@@ -415,8 +434,9 @@ export async function updateTask(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/calendar");
+  revalidatePath("/projects");
   revalidatePath("/recurring");
-  redirect(returnTo);
+  redirectTo(returnTo);
 }
 
 export async function deleteTask(formData: FormData) {
@@ -432,7 +452,8 @@ export async function deleteTask(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/calendar");
-  redirect(returnTo);
+  revalidatePath("/projects");
+  redirectTo(returnTo);
 }
 
 export async function moveTaskToToday(formData: FormData) {

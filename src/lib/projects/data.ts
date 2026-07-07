@@ -1,7 +1,8 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { withDb } from "@/db/with-db";
 import { projects, streams, tasks } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
+import type { ProjectOption, TaskRow } from "@/lib/tasks/data";
 
 export type ContextStatus = "active" | "completed";
 
@@ -29,14 +30,58 @@ export type StreamGroup = StreamRow & {
   projects: ProjectRow[];
 };
 
-export type ProjectsData = {
-  streamGroups: StreamGroup[];
-  activeStreams: StreamRow[];
+export type ProjectDetails = ProjectRow & {
+  doneTasks: TaskRow[];
+  openTasks: TaskRow[];
 };
 
-export async function getProjectsData(): Promise<ProjectsData> {
+export type ProjectsData = {
+  activeProjects: ProjectOption[];
+  activeStreams: StreamRow[];
+  selectedProject: ProjectDetails | null;
+  selectedTask: TaskRow | null;
+  streamGroups: StreamGroup[];
+};
+
+function isUuid(value: string | undefined) {
+  return (
+    value !== undefined &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    )
+  );
+}
+
+export async function getProjectsData(
+  selectedProjectId?: string,
+  selectedTaskId?: string
+): Promise<ProjectsData> {
   return withDb(async (db) => {
     const userId = await requireCurrentUserId(db);
+    const normalizedSelectedProjectId = isUuid(selectedProjectId)
+      ? selectedProjectId
+      : undefined;
+    const normalizedSelectedTaskId = isUuid(selectedTaskId)
+      ? selectedTaskId
+      : undefined;
+    const taskSelect = {
+      id: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      dueDate: tasks.dueDate,
+      dayPriority: tasks.dayPriority,
+      status: tasks.status,
+      size: tasks.size,
+      streamId: tasks.streamId,
+      streamName: streams.name,
+      streamColor: streams.color,
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      projectColor: projects.color,
+      recurringTaskId: tasks.recurringTaskId,
+      timeBlockStart: tasks.timeBlockStart,
+      timeBlockEnd: tasks.timeBlockEnd
+    };
 
     const streamRows = await db
       .select({
@@ -65,6 +110,19 @@ export async function getProjectsData(): Promise<ProjectsData> {
       .where(eq(projects.userId, userId))
       .orderBy(asc(projects.status), asc(projects.name));
 
+    const activeProjects: ProjectOption[] = projectRows
+      .filter(
+        (project) =>
+          project.status === "active" && project.streamStatus === "active"
+      )
+      .map((project) => ({
+        id: project.id,
+        name: project.name,
+        color: project.color,
+        streamId: project.streamId,
+        streamName: project.streamName
+      }));
+
     const openTaskContexts = await db
       .select({
         streamId: tasks.streamId,
@@ -72,6 +130,38 @@ export async function getProjectsData(): Promise<ProjectsData> {
       })
       .from(tasks)
       .where(and(eq(tasks.userId, userId), eq(tasks.status, "open")));
+
+    const selectedProjectTasks = normalizedSelectedProjectId
+      ? await db
+          .select(taskSelect)
+          .from(tasks)
+          .leftJoin(streams, eq(tasks.streamId, streams.id))
+          .leftJoin(projects, eq(tasks.projectId, projects.id))
+          .where(
+            and(
+              eq(tasks.userId, userId),
+              eq(tasks.projectId, normalizedSelectedProjectId),
+              inArray(tasks.status, ["open", "done"])
+            )
+          )
+          .orderBy(
+            asc(tasks.status),
+            asc(tasks.dueDate),
+            asc(tasks.dayPriority),
+            asc(tasks.createdAt)
+          )
+      : [];
+    const selectedTask = normalizedSelectedTaskId
+      ? await db
+          .select(taskSelect)
+          .from(tasks)
+          .leftJoin(streams, eq(tasks.streamId, streams.id))
+          .leftJoin(projects, eq(tasks.projectId, projects.id))
+          .where(
+            and(eq(tasks.userId, userId), eq(tasks.id, normalizedSelectedTaskId))
+          )
+          .limit(1)
+      : [];
 
     const streamTaskCounts = new Map<string, number>();
     const projectTaskCounts = new Map<string, number>();
@@ -102,10 +192,25 @@ export async function getProjectsData(): Promise<ProjectsData> {
           openTaskCount: projectTaskCounts.get(project.id) ?? 0
         }))
     }));
+    const selectedProjectBase = normalizedSelectedProjectId
+      ? streamGroups
+          .flatMap((stream) => stream.projects)
+          .find((project) => project.id === normalizedSelectedProjectId)
+      : null;
+    const selectedProject: ProjectDetails | null = selectedProjectBase
+      ? {
+          ...selectedProjectBase,
+          doneTasks: selectedProjectTasks.filter((task) => task.status === "done"),
+          openTasks: selectedProjectTasks.filter((task) => task.status === "open")
+        }
+      : null;
 
     return {
-      streamGroups,
-      activeStreams: streamGroups.filter((stream) => stream.status === "active")
+      activeProjects,
+      activeStreams: streamGroups.filter((stream) => stream.status === "active"),
+      selectedProject,
+      selectedTask: selectedTask[0] ?? null,
+      streamGroups
     };
   });
 }

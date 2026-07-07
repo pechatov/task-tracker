@@ -16,7 +16,7 @@ type TaskFormProps = {
   defaultTimeBlockEnd?: Date | null;
   defaultTimeBlockStart?: Date | null;
   projects: ProjectOption[];
-  returnTo?: "/" | "/calendar";
+  returnTo?: "/" | "/calendar" | `/projects?projectId=${string}`;
   streams: StreamOption[];
   task?: TaskRow | null;
 };
