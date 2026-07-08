@@ -182,6 +182,15 @@ export function formatTimeInput(date: Date | null) {
   return `${hours}:${minutes}`;
 }
 
+export function getMinutesFromStartOfDay(date: Date | null) {
+  if (!date) {
+    return null;
+  }
+
+  const { hour, minute } = getMoscowDateParts(date);
+  return hour * 60 + minute;
+}
+
 export function combineDateAndTime(dateValue: string, timeValue: string) {
   const dateParts = parseDateParts(dateValue);
   const timeMatch = /^(?<hour>\d{2}):(?<minute>\d{2})$/.exec(timeValue);

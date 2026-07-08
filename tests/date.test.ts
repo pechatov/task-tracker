@@ -4,6 +4,7 @@ import {
   formatDateInput,
   formatDisplayTime,
   formatTimeInput,
+  getMinutesFromStartOfDay,
   startOfMoscowDate
 } from "../src/lib/date";
 
@@ -23,6 +24,7 @@ describe("date helpers", () => {
     expect(date.toISOString()).toBe("2026-07-07T07:30:00.000Z");
     expect(formatTimeInput(date)).toBe("10:30");
     expect(formatDisplayTime(date)).toBe("10:30");
+    expect(getMinutesFromStartOfDay(date)).toBe(630);
   });
 
   it("returns Moscow day boundaries as UTC instants", () => {

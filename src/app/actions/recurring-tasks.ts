@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, ne } from "drizzle-orm";
 import { projects, recurringTasks, streams, tasks } from "@/db/schema";
 import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { getNextContextColor } from "@/lib/context/colors";
@@ -363,7 +363,7 @@ export async function deleteRecurringTask(formData: FormData) {
         and(
           eq(tasks.userId, userId),
           eq(tasks.recurringTaskId, recurringTaskId),
-          eq(tasks.status, "open"),
+          ne(tasks.status, "done"),
           gte(tasks.dueDate, today)
         )
       );
