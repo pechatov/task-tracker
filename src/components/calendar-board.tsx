@@ -65,7 +65,8 @@ import {
 import {
   moveTaskToBacklog,
   reorderCalendarTaskList,
-  scheduleTaskFromCalendar
+  scheduleTaskFromCalendar,
+  toggleTaskDone
 } from "@/app/actions/tasks";
 import { TaskTitle } from "@/components/task-title";
 import type { CalendarItem } from "@/lib/calendar/data";
@@ -107,7 +108,12 @@ type CalendarDropPreviewStyle = CSSProperties & {
   "--calendar-drop-preview-color": string;
 };
 
+type CalendarTaskEventElement = HTMLElement & {
+  calendarTaskDoubleClick?: (event: MouseEvent) => void;
+};
+
 const sidebarListOrder: CalendarSidebarList[] = ["backlog", "overdue"];
+const taskOpenClickDelayMs = 450;
 
 const calendarSidebarCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
@@ -692,6 +698,7 @@ export function CalendarBoard({
   const calendarRef = useRef<FullCalendar | null>(null);
   const calendarDropRootRef = useRef<HTMLDivElement | null>(null);
   const backlogPanelRef = useRef<HTMLElement | null>(null);
+  const openTaskTimerRef = useRef<number | null>(null);
   const returningTaskTimerRef = useRef<number | null>(null);
   const initialSidebarLists = useMemo(
     () => makeSidebarLists(backlogTasks, overdueTasks),
@@ -737,6 +744,10 @@ export function CalendarBoard({
 
   useEffect(() => {
     return () => {
+      if (openTaskTimerRef.current !== null) {
+        window.clearTimeout(openTaskTimerRef.current);
+      }
+
       if (returningTaskTimerRef.current !== null) {
         window.clearTimeout(returningTaskTimerRef.current);
       }
@@ -866,6 +877,24 @@ export function CalendarBoard({
 
     getCalendarApi()?.unselect();
     router.push(`/calendar?${params.toString()}`);
+  }
+
+  function clearPendingTaskOpen() {
+    if (openTaskTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(openTaskTimerRef.current);
+    openTaskTimerRef.current = null;
+  }
+
+  function openTaskAfterClick(taskId: string) {
+    clearPendingTaskOpen();
+
+    openTaskTimerRef.current = window.setTimeout(() => {
+      router.push(`/calendar?taskId=${taskId}`);
+      openTaskTimerRef.current = null;
+    }, taskOpenClickDelayMs);
   }
 
   function scheduleChangedTask(
@@ -1003,13 +1032,59 @@ export function CalendarBoard({
     const taskId = arg.event.extendedProps.taskId;
 
     if (typeof taskId === "string") {
-      router.push(`/calendar?taskId=${taskId}`);
+      if (arg.jsEvent.detail > 1) {
+        clearPendingTaskOpen();
+        return;
+      }
+
+      openTaskAfterClick(taskId);
       return;
     }
 
     if (typeof eventUrl === "string" && eventUrl) {
       window.open(eventUrl, "_blank", "noopener,noreferrer");
     }
+  }
+
+  function onTaskDoubleClick(taskId: string) {
+    clearPendingTaskOpen();
+
+    const formData = new FormData();
+    formData.set("taskId", taskId);
+
+    startTransition(async () => {
+      await toggleTaskDone(formData);
+      router.refresh();
+    });
+  }
+
+  function onEventDidMount(arg: { el: HTMLElement; event: EventDropArg["event"] }) {
+    const taskId = arg.event.extendedProps.taskId;
+
+    if (typeof taskId !== "string") {
+      return;
+    }
+
+    const element = arg.el as CalendarTaskEventElement;
+    const handler = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onTaskDoubleClick(taskId);
+    };
+
+    element.calendarTaskDoubleClick = handler;
+    element.addEventListener("dblclick", handler);
+  }
+
+  function onEventWillUnmount(arg: { el: HTMLElement }) {
+    const element = arg.el as CalendarTaskEventElement;
+
+    if (!element.calendarTaskDoubleClick) {
+      return;
+    }
+
+    element.removeEventListener("dblclick", element.calendarTaskDoubleClick);
+    delete element.calendarTaskDoubleClick;
   }
 
   function removeSidebarTask(taskId: string) {
@@ -1323,7 +1398,7 @@ export function CalendarBoard({
             </div>
           </div>
         </div>
-        {isPending ? <div className="calendar-saving">Сохраняю расписание...</div> : null}
+        {isPending ? <div className="calendar-saving">Сохраняю изменения...</div> : null}
         {dragSource !== "none" ? (
           <div className="calendar-drop-banner">
             <CalendarDays size={15} />
@@ -1349,11 +1424,13 @@ export function CalendarBoard({
             events={events}
             datesSet={onDatesSet}
             eventClick={onEventClick}
+            eventDidMount={onEventDidMount}
             eventDragStart={onEventDragStart}
             eventDragStop={onEventDragStop}
             eventDrop={onEventDrop}
             eventReceive={onEventReceive}
             eventResize={onEventResize}
+            eventWillUnmount={onEventWillUnmount}
             select={onSelect}
             editable
             droppable
