@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
 import { projects, recurringTasks, streams, tasks } from "@/db/schema";
 import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { getNextContextColor } from "@/lib/context/colors";
 import {
   combineDateAndTime,
   formatDateInput,
+  getMinutesFromStartOfDay,
   parseDateInputValue,
   startOfMoscowDate
 } from "@/lib/date";
@@ -277,14 +278,6 @@ function addMinutes(date: Date, minutes: number) {
   return result;
 }
 
-function getMinutesFromDate(date: Date | null) {
-  if (!date) {
-    return null;
-  }
-
-  return date.getHours() * 60 + date.getMinutes();
-}
-
 function getRecurringConversionSchedule(formData: FormData, startDate: string) {
   const frequency = getRecurringFrequency(formData);
 
@@ -298,9 +291,24 @@ function getRecurringConversionSchedule(formData: FormData, startDate: string) {
 
 async function ensureGeneratedRecurringInstances(
   db: Parameters<Parameters<typeof withDb>[0]>[0],
-  userId: string
+  userId: string,
+  recurringTaskId?: string
 ) {
+  const today = formatDateInput();
   const syncWindow = getCalendarSyncWindow(new Date());
+
+  if (recurringTaskId) {
+    await db
+      .delete(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.recurringTaskId, recurringTaskId),
+          eq(tasks.status, "open"),
+          gte(tasks.dueDate, today)
+        )
+      );
+  }
 
   await ensureRecurringTaskInstances(
     db,
@@ -414,8 +422,8 @@ export async function updateTask(formData: FormData) {
           streamId: context.streamId,
           projectId: context.projectId,
           ...getRecurringConversionSchedule(formData, dueDate),
-          timeBlockStartMinutes: getMinutesFromDate(timeBlock.timeBlockStart),
-          timeBlockEndMinutes: getMinutesFromDate(timeBlock.timeBlockEnd)
+          timeBlockStartMinutes: getMinutesFromStartOfDay(timeBlock.timeBlockStart),
+          timeBlockEndMinutes: getMinutesFromStartOfDay(timeBlock.timeBlockEnd)
         })
         .returning({ id: recurringTasks.id });
 
@@ -428,7 +436,7 @@ export async function updateTask(formData: FormData) {
         })
         .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
 
-      await ensureGeneratedRecurringInstances(db, userId);
+      await ensureGeneratedRecurringInstances(db, userId, recurringTask.id);
     }
   });
 

@@ -247,16 +247,22 @@ export function RecurringTaskForm({
               defaultValue={formatMinutesAsTime(
                 task?.timeBlockStartMinutes ?? null
               )}
+              inputMode="numeric"
               name="timeBlockStart"
-              type="time"
+              pattern="[0-9]{2}:[0-9]{2}"
+              placeholder="HH:mm"
+              type="text"
             />
           </label>
           <label className="field">
             Конец блока
             <input
               defaultValue={formatMinutesAsTime(task?.timeBlockEndMinutes ?? null)}
+              inputMode="numeric"
               name="timeBlockEnd"
-              type="time"
+              pattern="[0-9]{2}:[0-9]{2}"
+              placeholder="HH:mm"
+              type="text"
             />
           </label>
         </div>

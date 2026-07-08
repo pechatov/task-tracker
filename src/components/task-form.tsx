@@ -153,16 +153,22 @@ export function TaskForm({
             Начало блока
             <input
               defaultValue={formatTimeInput(timeBlockStart)}
+              inputMode="numeric"
               name="timeBlockStart"
-              type="time"
+              pattern="[0-9]{2}:[0-9]{2}"
+              placeholder="HH:mm"
+              type="text"
             />
           </label>
           <label className="field">
             Конец блока
             <input
               defaultValue={formatTimeInput(timeBlockEnd)}
+              inputMode="numeric"
               name="timeBlockEnd"
-              type="time"
+              pattern="[0-9]{2}:[0-9]{2}"
+              placeholder="HH:mm"
+              type="text"
             />
           </label>
         </div>
