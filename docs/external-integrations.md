@@ -45,6 +45,10 @@ The response contains mixed items:
 - `kind: "task"` with `editable: true`
 - `kind: "calendar-event"` with `editable: false`
 
+The inclusive `from`/`to` range is limited to 93 days and 2,000 returned items.
+The endpoint is read-only; the background worker maintains generated
+recurring-task instances.
+
 ### List Tasks
 
 ```sh
@@ -112,13 +116,15 @@ curl -H "Authorization: Bearer <token>" \
 
 ## MCP Server
 
-The MCP server is a separate stdio process. It uses the same database and token
-rules as the REST API.
+The MCP server is a separate stdio process and a thin client for the REST API.
+It does not need database or application-secret credentials.
 
 Start it from the repo:
 
 ```sh
-TASK_TRACKER_INTEGRATION_TOKEN=<token> npm --silent run mcp:start
+TASK_TRACKER_API_BASE_URL=https://task-tracker.example.com \
+TASK_TRACKER_INTEGRATION_TOKEN=<token> \
+npm --silent run mcp:start
 ```
 
 Example MCP stdio configuration:
@@ -131,6 +137,7 @@ Example MCP stdio configuration:
       "args": ["--silent", "run", "mcp:start"],
       "cwd": "/path/to/task-tracker",
       "env": {
+        "TASK_TRACKER_API_BASE_URL": "https://task-tracker.example.com",
         "TASK_TRACKER_INTEGRATION_TOKEN": "<token>"
       }
     }
@@ -154,7 +161,8 @@ Hermes Agent reads MCP servers from `~/.hermes/config.yaml` under
 `mcp_servers`. The task tracker MCP server is a local stdio server, so configure
 it with `command`, `args`, and `env`.
 
-1. Deploy the app version that contains the integration API and run migrations:
+1. Deploy and start the app version that contains the integration API, then run
+   migrations:
 
    ```sh
    npm run db:migrate
@@ -174,7 +182,9 @@ it with `command`, `args`, and `env`.
 
    ```sh
    cd /path/to/task-tracker
-   TASK_TRACKER_INTEGRATION_TOKEN=<token> npm --silent run mcp:start
+   TASK_TRACKER_API_BASE_URL=https://task-tracker.example.com \
+   TASK_TRACKER_INTEGRATION_TOKEN=<token> \
+   npm --silent run mcp:start
    ```
 
    Stop it with `Ctrl+C` after verifying it waits for MCP input.
@@ -189,6 +199,7 @@ it with `command`, `args`, and `env`.
          - "-lc"
          - "cd /path/to/task-tracker && npm --silent run mcp:start"
        env:
+         TASK_TRACKER_API_BASE_URL: "https://task-tracker.example.com"
          TASK_TRACKER_INTEGRATION_TOKEN: "<token>"
        enabled: true
        timeout: 120
@@ -207,10 +218,9 @@ it with `command`, `args`, and `env`.
          prompts: false
    ```
 
-   If the app process normally gets secrets from shell environment instead of a
-   repo `.env` file, also add the required app env values under `env`:
-   `DATABASE_URL`, `APP_ENCRYPTION_KEY`, `APP_ENCRYPTION_KEY_ID`, and
-   `AUTH_SESSION_SECRET`.
+   `TASK_TRACKER_API_BASE_URL` must be reachable from the machine where Hermes
+   runs. Do not pass `DATABASE_URL`, encryption keys, or session secrets to the
+   MCP process.
 
 5. Start a new Hermes session:
 
@@ -254,6 +264,5 @@ Troubleshooting:
   `npm --silent run mcp:start`.
 - If tool calls return `Missing required scope`, create a new integration token
   with the required scope and update `TASK_TRACKER_INTEGRATION_TOKEN`.
-- If the server cannot connect to Postgres, either run Hermes from a directory
-  where `.env` is available through the `cd /path/to/task-tracker` command or
-  put the required env values directly in the Hermes config.
+- If tool calls cannot reach Task Tracker, check `TASK_TRACKER_API_BASE_URL`,
+  TLS, firewall rules, and whether the web app is running.

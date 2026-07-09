@@ -1,26 +1,16 @@
 import "dotenv/config";
 import readline from "node:readline";
 import { z } from "zod";
-import { createDb, createPgPool, type Db } from "../db/client";
 import {
-  createTaskForUser,
   createTimeBlockFromDateAndTimes,
-  getCalendarPlanForUser,
-  listContextsForUser,
-  listTasksForUser,
-  updateTaskForUser,
   type CreateTaskInput,
   type UpdateTaskInput
 } from "../lib/api/task-service";
-import {
-  authenticateIntegrationToken,
-  IntegrationAuthError,
-  type IntegrationAuth
-} from "../lib/integrations/auth";
-import type { IntegrationTokenScope } from "../lib/integrations/tokens";
 
 const protocolVersion = "2025-11-25";
 const integrationToken = process.env.TASK_TRACKER_INTEGRATION_TOKEN?.trim() || null;
+const apiBaseUrl = process.env.TASK_TRACKER_API_BASE_URL?.trim() || null;
+const apiTimeoutMs = 30_000;
 
 type JsonRpcId = number | string | null;
 
@@ -105,7 +95,17 @@ const rescheduleTaskSchema = z
     startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     endTime: z.string().regex(/^\d{2}:\d{2}$/).optional()
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      (input.startTime === undefined) !== (input.endTime === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Both startTime and endTime are required"
+      });
+    }
+  });
 
 const tools: ToolDefinition[] = [
   {
@@ -179,6 +179,10 @@ const tools: ToolDefinition[] = [
         endTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" }
       },
       required: ["taskId", "dueDate"],
+      dependentRequired: {
+        startTime: ["endTime"],
+        endTime: ["startTime"]
+      },
       additionalProperties: false
     }
   },
@@ -232,9 +236,6 @@ function taskMutationInputSchema(required: string[]) {
   };
 }
 
-const pool = createPgPool();
-const db = createDb(pool);
-
 function writeMessage(message: unknown) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
@@ -275,24 +276,59 @@ function toolError(error: unknown): ToolResult {
   };
 }
 
-async function withAuth<T>(
-  requiredScopes: IntegrationTokenScope[],
-  handler: (db: Db, auth: IntegrationAuth) => Promise<T>
-) {
-  if (!integrationToken) {
-    throw new IntegrationAuthError(
-      "TASK_TRACKER_INTEGRATION_TOKEN is required",
-      401
-    );
+function getApiUrl(path: string) {
+  if (!apiBaseUrl) {
+    throw new Error("TASK_TRACKER_API_BASE_URL is required");
   }
 
-  const auth = await authenticateIntegrationToken(
-    db,
-    integrationToken,
-    requiredScopes
-  );
+  try {
+    return new URL(path, apiBaseUrl);
+  } catch {
+    throw new Error("TASK_TRACKER_API_BASE_URL must be a valid URL");
+  }
+}
 
-  return handler(db, auth);
+async function requestApi<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!integrationToken) {
+    throw new Error("TASK_TRACKER_INTEGRATION_TOKEN is required");
+  }
+
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "application/json");
+  headers.set("Authorization", `Bearer ${integrationToken}`);
+
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(getApiUrl(path), {
+    ...init,
+    headers,
+    signal: AbortSignal.timeout(apiTimeoutMs)
+  });
+  const body = await response.text();
+  let payload: unknown = null;
+
+  if (body) {
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      payload = body;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" &&
+      payload !== null &&
+      "error" in payload &&
+      typeof payload.error === "string"
+        ? payload.error
+        : `Task Tracker API returned ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload as T;
 }
 
 function normalizeTaskMutation<T extends CreateTaskInput | UpdateTaskInput>(
@@ -336,40 +372,60 @@ async function callTool(name: string, args: unknown) {
     switch (name) {
       case "list_calendar_items": {
         const input = calendarRangeSchema.parse(args ?? {});
-        const result = await withAuth(["calendar:read"], (db, auth) =>
-          getCalendarPlanForUser(db, auth.user.id, input)
+        const query = new URLSearchParams({
+          from: input.from,
+          to: input.to
+        });
+        const result = await requestApi<unknown>(
+          `/api/v1/calendar?${query.toString()}`
         );
         return toolSuccess(result);
       }
       case "list_tasks": {
         const input = listTasksSchema.parse(args ?? {});
-        const result = await withAuth(["tasks:read"], (db, auth) =>
-          listTasksForUser(db, auth.user.id, input)
+        const query = new URLSearchParams({
+          includeBacklog: String(input.includeBacklog),
+          status: input.status
+        });
+
+        if (input.from) {
+          query.set("from", input.from);
+        }
+
+        if (input.to) {
+          query.set("to", input.to);
+        }
+
+        const result = await requestApi<unknown>(
+          `/api/v1/tasks?${query.toString()}`
         );
-        return toolSuccess({ tasks: result });
+        return toolSuccess(result);
       }
       case "list_contexts": {
         z.object({}).strict().parse(args ?? {});
-        const result = await withAuth(["contexts:read"], (db, auth) =>
-          listContextsForUser(db, auth.user.id)
-        );
+        const result = await requestApi<unknown>("/api/v1/contexts");
         return toolSuccess(result);
       }
       case "create_task": {
         const input = normalizeTaskMutation(createTaskSchema.parse(args ?? {}));
-        const result = await withAuth(["tasks:write"], (db, auth) =>
-          createTaskForUser(db, auth.user.id, input)
-        );
-        return toolSuccess({ task: result });
+        const result = await requestApi<unknown>("/api/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(input)
+        });
+        return toolSuccess(result);
       }
       case "update_task": {
         const { taskId, ...input } = normalizeTaskMutation(
           updateTaskSchema.parse(args ?? {})
         );
-        const result = await withAuth(["tasks:write"], (db, auth) =>
-          updateTaskForUser(db, auth.user.id, taskId, input)
+        const result = await requestApi<unknown>(
+          `/api/v1/tasks/${encodeURIComponent(taskId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(input)
+          }
         );
-        return toolSuccess({ task: result });
+        return toolSuccess(result);
       }
       case "reschedule_task": {
         const input = rescheduleTaskSchema.parse(args ?? {});
@@ -384,17 +440,25 @@ async function callTool(name: string, args: unknown) {
                 })
               }
             : { dueDate: input.dueDate, timeBlock: null };
-        const result = await withAuth(["tasks:write"], (db, auth) =>
-          updateTaskForUser(db, auth.user.id, input.taskId, update)
+        const result = await requestApi<unknown>(
+          `/api/v1/tasks/${encodeURIComponent(input.taskId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(update)
+          }
         );
-        return toolSuccess({ task: result });
+        return toolSuccess(result);
       }
       case "complete_task": {
         const input = taskIdSchema.parse(args ?? {});
-        const result = await withAuth(["tasks:write"], (db, auth) =>
-          updateTaskForUser(db, auth.user.id, input.taskId, { status: "done" })
+        const result = await requestApi<unknown>(
+          `/api/v1/tasks/${encodeURIComponent(input.taskId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ status: "done" })
+          }
         );
-        return toolSuccess({ task: result });
+        return toolSuccess(result);
       }
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -437,12 +501,19 @@ async function handleRequest(message: JsonRpcRequest) {
       success(message.id, { tools });
       return;
     case "tools/call": {
-      const params = z
+      const parsedParams = z
         .object({
           name: z.string(),
           arguments: z.unknown().optional()
         })
-        .parse(message.params ?? {});
+        .safeParse(message.params ?? {});
+
+      if (!parsedParams.success) {
+        failure(message.id, -32602, "Invalid tools/call params");
+        return;
+      }
+
+      const params = parsedParams.data;
       success(message.id, await callTool(params.name, params.arguments));
       return;
     }
@@ -455,26 +526,41 @@ const rl = readline.createInterface({
   input: process.stdin,
   crlfDelay: Infinity
 });
+let requestQueue = Promise.resolve();
+
+async function processLine(line: string) {
+  let message: JsonRpcRequest;
+
+  try {
+    const parsed = JSON.parse(line) as unknown;
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      failure(null, -32600, "Invalid JSON-RPC message");
+      return;
+    }
+
+    message = parsed as JsonRpcRequest;
+  } catch {
+    failure(null, -32700, "Parse error");
+    return;
+  }
+
+  try {
+    await handleRequest(message);
+  } catch (error) {
+    failure(message.id, -32603, "Internal error");
+    console.error(error);
+  }
+}
 
 rl.on("line", (line) => {
   if (!line.trim()) {
     return;
   }
 
-  void (async () => {
-    try {
-      await handleRequest(JSON.parse(line) as JsonRpcRequest);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      failure(null, -32603, message);
-      console.error(message);
-    }
-  })();
+  requestQueue = requestQueue.then(() => processLine(line));
 });
 
 rl.on("close", () => {
-  pool
-    .end()
-    .catch((error) => console.error(error))
-    .finally(() => process.exit(0));
+  void requestQueue.finally(() => process.exit(0));
 });

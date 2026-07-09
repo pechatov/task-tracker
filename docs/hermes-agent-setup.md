@@ -12,26 +12,20 @@ stdio-сервер. Hermes сможет читать план календаря
 
 ## 1. Подготовить Task Tracker
 
-На сервере или машине, где лежит репозиторий Task Tracker:
+На сервере или машине, где развернут Task Tracker:
 
 ```sh
 cd /path/to/task-tracker
 npm install
 npm run db:migrate
+npm run dev
 ```
 
-Проверь, что приложение видит свои обычные переменные окружения. MCP-сервер
-использует тот же код и ту же БД, что и веб-приложение.
-
-Минимально нужны:
-
-- `DATABASE_URL`
-- `APP_ENCRYPTION_KEY`
-- `APP_ENCRYPTION_KEY_ID`
-- `AUTH_SESSION_SECRET`
-
-Если в корне репозитория есть рабочий `.env`, `npm --silent run mcp:start`
-подхватит его через `dotenv`.
+Для локальной разработки запусти `npm run worker:dev` в другом терминале. В
+production используй обычный deployment, где `app` и `worker` запущены вместе.
+MCP-сервер обращается к REST API, поэтому ему не нужны доступ к Postgres, ключ
+шифрования или session secret. Убедись, что URL приложения доступен с машины,
+где работает Hermes.
 
 ## 2. Создать integration token
 
@@ -69,7 +63,9 @@ stdout, а stdio MCP требует, чтобы stdout содержал толь
 
 ```sh
 cd /path/to/task-tracker
-TASK_TRACKER_INTEGRATION_TOKEN=ttk_... npm --silent run mcp:start
+TASK_TRACKER_API_BASE_URL=https://task-tracker.example.com \
+TASK_TRACKER_INTEGRATION_TOKEN=ttk_... \
+npm --silent run mcp:start
 ```
 
 Если процесс запустился и просто ждет ввода, это нормально. Останови его через
@@ -93,6 +89,7 @@ mcp_servers:
       - "-lc"
       - "cd /path/to/task-tracker && npm --silent run mcp:start"
     env:
+      TASK_TRACKER_API_BASE_URL: "https://task-tracker.example.com"
       TASK_TRACKER_INTEGRATION_TOKEN: "ttk_..."
     enabled: true
     timeout: 120
@@ -114,19 +111,11 @@ mcp_servers:
 Замени:
 
 - `/path/to/task-tracker` на абсолютный путь к репозиторию.
+- `https://task-tracker.example.com` на URL запущенного Task Tracker.
 - `ttk_...` на токен из предыдущего шага.
 
-Если `.env` не доступен в рабочей директории или Hermes запускается в окружении
-без нужных переменных, добавь их в `env`:
-
-```yaml
-    env:
-      TASK_TRACKER_INTEGRATION_TOKEN: "ttk_..."
-      DATABASE_URL: "postgres://task_tracker:task_tracker@localhost:5432/task_tracker"
-      APP_ENCRYPTION_KEY: "..."
-      APP_ENCRYPTION_KEY_ID: "..."
-      AUTH_SESSION_SECRET: "..."
-```
+Не добавляй в конфиг Hermes `DATABASE_URL`, `APP_ENCRYPTION_KEY` или
+`AUTH_SESSION_SECRET`: MCP работает только через scoped REST API.
 
 ## 5. Запустить или перезагрузить Hermes
 
@@ -234,12 +223,12 @@ npm run mcp:start
 Токен не содержит нужный scope. Создай новый токен с нужными scopes и обнови
 `TASK_TRACKER_INTEGRATION_TOKEN` в конфиге Hermes.
 
-### MCP server не подключается к Postgres
+### MCP server не подключается к Task Tracker
 
-- Проверь `DATABASE_URL`.
-- Проверь, что команда в Hermes делает `cd /path/to/task-tracker`.
-- Если `.env` нет или он не читается, передай все нужные переменные через
-  `env` в `~/.hermes/config.yaml`.
+- Проверь `TASK_TRACKER_API_BASE_URL` командой `curl` с машины Hermes.
+- Проверь, что веб-приложение запущено и URL использует правильный протокол и
+  порт.
+- Для HTTPS проверь сертификат и сетевые правила между Hermes и приложением.
 
 ### Нужно проверить MCP без Hermes
 
@@ -250,7 +239,9 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
-| TASK_TRACKER_INTEGRATION_TOKEN=ttk_... npm --silent run mcp:start
+| TASK_TRACKER_API_BASE_URL=https://task-tracker.example.com \
+  TASK_TRACKER_INTEGRATION_TOKEN=ttk_... \
+  npm --silent run mcp:start
 ```
 
 В ответе должен быть список tools.

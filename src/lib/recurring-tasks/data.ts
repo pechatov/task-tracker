@@ -4,6 +4,7 @@ import { createDb } from "@/db/client";
 import { withDb } from "@/db/with-db";
 import { projects, recurringTasks, streams, tasks } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
+import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
 import { formatDateInput } from "@/lib/date";
 import {
   combineDateAndMinutes,
@@ -213,6 +214,23 @@ export async function ensureRecurringTaskInstances(
     .onConflictDoNothing({
       target: [tasks.recurringTaskId, tasks.recurringOccurrenceDate]
     });
+}
+
+export async function ensureCurrentRecurringTaskInstancesForAllUsers() {
+  const syncWindow = getCalendarSyncWindow(new Date());
+  const windowStart = formatDateInput(syncWindow.startsAt);
+  const windowEnd = formatDateInput(syncWindow.endsAt);
+
+  await withDb(async (db) => {
+    const userRows = await db
+      .selectDistinct({ userId: recurringTasks.userId })
+      .from(recurringTasks)
+      .where(eq(recurringTasks.status, "active"));
+
+    for (const { userId } of userRows) {
+      await ensureRecurringTaskInstances(db, userId, windowStart, windowEnd);
+    }
+  });
 }
 
 export const getRecurringTasksData = cache(async (selectedRecurringTaskId?: string) => {

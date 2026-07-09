@@ -2,6 +2,7 @@ import {
   and,
   asc,
   eq,
+  gt,
   gte,
   inArray,
   isNotNull,
@@ -25,7 +26,6 @@ import {
   parseDateInputValue,
   startOfMoscowDate
 } from "@/lib/date";
-import { ensureRecurringTaskInstances } from "@/lib/recurring-tasks/data";
 import { getNextDayPriority } from "@/lib/tasks/data";
 import { isTaskSize, type TaskSize } from "@/lib/tasks/size";
 import { isTaskStatus, type TaskStatus } from "@/lib/tasks/status";
@@ -152,6 +152,9 @@ export type CalendarPlanInput = {
   to: string;
 };
 
+export const MAX_CALENDAR_RANGE_DAYS = 93;
+export const MAX_CALENDAR_ITEMS = 2_000;
+
 const taskSelect = {
   id: tasks.id,
   title: tasks.title,
@@ -202,6 +205,41 @@ function normalizeDate(value: string | null | undefined) {
   } catch {
     throw new ApiServiceError("Date must use yyyy-mm-dd format");
   }
+}
+
+export function normalizeCalendarRange(input: CalendarPlanInput) {
+  const from = normalizeDate(input.from);
+  const to = normalizeDate(input.to);
+
+  if (!from || !to || from > to) {
+    throw new ApiServiceError("Calendar range must include from <= to");
+  }
+
+  const startsAt = startOfMoscowDate(from);
+  const endsAt = endOfMoscowDate(to);
+  const inclusiveDays =
+    Math.floor(
+      (startOfMoscowDate(to).getTime() - startsAt.getTime()) /
+        (24 * 60 * 60 * 1000)
+    ) + 1;
+
+  if (inclusiveDays > MAX_CALENDAR_RANGE_DAYS) {
+    throw new ApiServiceError(
+      `Calendar range cannot exceed ${MAX_CALENDAR_RANGE_DAYS} days`
+    );
+  }
+
+  return { endsAt, from, startsAt, to };
+}
+
+export function getCalendarEventOverlapCondition(
+  startsAt: Date,
+  endsAt: Date
+) {
+  return and(
+    lte(calendarEvents.startsAt, endsAt),
+    gt(calendarEvents.endsAt, startsAt)
+  );
 }
 
 function normalizeStatus(value: string | undefined) {
@@ -668,14 +706,7 @@ export async function getCalendarPlanForUser(
   userId: string,
   input: CalendarPlanInput
 ) {
-  const from = normalizeDate(input.from);
-  const to = normalizeDate(input.to);
-
-  if (!from || !to || from > to) {
-    throw new ApiServiceError("Calendar range must include from <= to");
-  }
-
-  await ensureRecurringTaskInstances(db, userId, from, to);
+  const { endsAt, from, startsAt, to } = normalizeCalendarRange(input);
 
   const taskRows = await db
     .select(taskSelect)
@@ -690,7 +721,16 @@ export async function getCalendarPlanForUser(
         lte(tasks.dueDate, to)
       )
     )
-    .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt));
+    .orderBy(asc(tasks.dueDate), asc(tasks.dayPriority), asc(tasks.createdAt))
+    .limit(MAX_CALENDAR_ITEMS + 1);
+
+  if (taskRows.length > MAX_CALENDAR_ITEMS) {
+    throw new ApiServiceError(
+      `Calendar range contains more than ${MAX_CALENDAR_ITEMS} items; request a smaller range`
+    );
+  }
+
+  const remainingItemLimit = MAX_CALENDAR_ITEMS - taskRows.length;
 
   const eventRows = await db
     .select({
@@ -712,11 +752,17 @@ export async function getCalendarPlanForUser(
       and(
         eq(calendarEvents.userId, userId),
         eq(connectedCalendars.isEnabled, true),
-        gte(calendarEvents.startsAt, startOfMoscowDate(from)),
-        lte(calendarEvents.startsAt, endOfMoscowDate(to))
+        getCalendarEventOverlapCondition(startsAt, endsAt)
       )
     )
-    .orderBy(asc(calendarEvents.startsAt));
+    .orderBy(asc(calendarEvents.startsAt))
+    .limit(remainingItemLimit + 1);
+
+  if (eventRows.length > remainingItemLimit) {
+    throw new ApiServiceError(
+      `Calendar range contains more than ${MAX_CALENDAR_ITEMS} items; request a smaller range`
+    );
+  }
 
   const taskItems: ApiCalendarItem[] = taskRows
     .map(serializeTask)
