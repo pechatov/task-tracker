@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, gt, gte, isNull, lt, lte } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte
+} from "drizzle-orm";
 import { cache } from "react";
 import { createDb } from "@/db/client";
 import { withDb } from "@/db/with-db";
@@ -150,6 +162,7 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
       backlogTasks,
       weekTasks,
       overdueTasks,
+      timedTasks,
       todaysCalendarEvents,
       selectedTask
     ] = await Promise.all([
@@ -242,6 +255,20 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
           asc(tasks.createdAt)
         ),
       db
+        .select(taskSelect)
+        .from(tasks)
+        .leftJoin(streams, eq(tasks.streamId, streams.id))
+        .leftJoin(projects, eq(tasks.projectId, projects.id))
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            inArray(tasks.status, ["open", "done"]),
+            eq(tasks.dueDate, today),
+            isNotNull(tasks.timeBlockStart)
+          )
+        )
+        .orderBy(asc(tasks.timeBlockStart), asc(tasks.createdAt)),
+      db
         .select({
           id: calendarEvents.id,
           title: calendarEvents.title,
@@ -276,13 +303,6 @@ export const getTodayData = cache(async (selectedTaskId?: string) => {
             .limit(1)
         : Promise.resolve([])
     ]);
-
-    const timedTasks = openTodayTasks
-      .filter((task) => task.timeBlockStart !== null)
-      .sort(
-        (a, b) =>
-          (a.timeBlockStart?.getTime() ?? 0) - (b.timeBlockStart?.getTime() ?? 0)
-      );
 
     return {
       today,

@@ -741,6 +741,29 @@ a {
 
 .timeline-row {
   grid-template-columns: 96px 4px minmax(0, 1fr);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.timeline-task-row {
+  grid-template-columns: 96px 4px minmax(0, 1fr) 30px;
+}
+
+.timeline-row-muted {
+  opacity: 0.48;
+}
+
+.timeline-row-muted .event-marker {
+  filter: grayscale(0.65);
+}
+
+.timeline-row-muted .task-title,
+.timeline-row-muted .task-title-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
 }
 
 .time {
