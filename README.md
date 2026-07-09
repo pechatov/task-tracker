@@ -87,6 +87,11 @@ This is a fragile local workaround. If Outlook Web stops issuing a usable Graph 
 
 If Exchange events are already visible in Apple Calendar, use the macOS EventKit bridge instead of browser-session scraping. Setup and production launchd instructions live in [docs/macos-calendar-bridge.md](./docs/macos-calendar-bridge.md).
 
+## External Integrations
+
+REST API and MCP setup for external task integrations live in [docs/external-integrations.md](./docs/external-integrations.md).
+Hermes Agent setup lives in [docs/hermes-agent-setup.md](./docs/hermes-agent-setup.md).
+
 ## Checks
 
 ```sh

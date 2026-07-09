@@ -88,6 +88,29 @@ export const sessions = pgTable(
   })
 );
 
+export const integrationTokens = pgTable(
+  "integration_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    scopes: jsonb("scopes").$type<string[]>().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    ...timestamps
+  },
+  (table) => ({
+    userIdx: index("integration_tokens_user_id_idx").on(table.userId),
+    tokenHashIdx: uniqueIndex("integration_tokens_token_hash_unique").on(
+      table.tokenHash
+    )
+  })
+);
+
 export const streams = pgTable(
   "streams",
   {
@@ -355,7 +378,15 @@ export const usersRelations = relations(users, ({ many }) => ({
   projects: many(projects),
   recurringTasks: many(recurringTasks),
   tasks: many(tasks),
-  calendarSources: many(calendarSources)
+  calendarSources: many(calendarSources),
+  integrationTokens: many(integrationTokens)
+}));
+
+export const integrationTokensRelations = relations(integrationTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [integrationTokens.userId],
+    references: [users.id]
+  })
 }));
 
 export const streamsRelations = relations(streams, ({ one, many }) => ({

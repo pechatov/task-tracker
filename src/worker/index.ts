@@ -1,6 +1,7 @@
 import { setTimeout } from "node:timers/promises";
 import { syncAllActiveCalendarSources } from "../lib/calendar/sync";
 import { getEnv } from "../lib/env";
+import { ensureCurrentRecurringTaskInstancesForAllUsers } from "../lib/recurring-tasks/data";
 
 async function main() {
   const env = getEnv();
@@ -13,9 +14,10 @@ async function main() {
   });
 
   while (true) {
-    await setTimeout(pollMs);
     console.info("calendar sync tick");
+    await ensureCurrentRecurringTaskInstancesForAllUsers();
     await syncAllActiveCalendarSources();
+    await setTimeout(pollMs);
   }
 }
 
