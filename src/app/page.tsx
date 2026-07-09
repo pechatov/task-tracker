@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { deleteTask } from "@/app/actions/tasks";
 import { QuickAddTask } from "@/components/quick-add-task";
+import { TaskDoneToggle } from "@/components/task-done-toggle";
 import { TaskLabels } from "@/components/task-labels";
 import { TaskForm } from "@/components/task-form";
 import { TaskTitle } from "@/components/task-title";
@@ -46,6 +47,22 @@ function getEventUrl(event: CalendarEventRow) {
   return null;
 }
 
+type TimelineItem =
+  | {
+      id: string;
+      isInactive: boolean;
+      kind: "calendar-event";
+      sortTime: number;
+      event: CalendarEventRow;
+    }
+  | {
+      id: string;
+      isInactive: boolean;
+      kind: "task";
+      sortTime: number;
+      task: TodayData["timedTasks"][number];
+    };
+
 function formatTimeRange(start: Date | null, end: Date | null) {
   if (!start) {
     return "";
@@ -68,6 +85,30 @@ function getBoardKey(data: Awaited<ReturnType<typeof getTodayData>>) {
 }
 
 function TodayMeetingsPanel({ data }: { data: TodayData }) {
+  const now = new Date();
+  const timelineItems: TimelineItem[] = [
+    ...data.calendarEvents.map((event) => ({
+      id: `calendar-event:${event.id}`,
+      isInactive: event.endsAt <= now,
+      kind: "calendar-event" as const,
+      sortTime: event.startsAt.getTime(),
+      event
+    })),
+    ...data.timedTasks.map((task) => ({
+      id: `task:${task.id}`,
+      isInactive: task.status === "done",
+      kind: "task" as const,
+      sortTime: task.timeBlockStart?.getTime() ?? Number.MAX_SAFE_INTEGER,
+      task
+    }))
+  ].sort((a, b) => {
+    if (a.isInactive !== b.isInactive) {
+      return a.isInactive ? 1 : -1;
+    }
+
+    return a.sortTime - b.sortTime;
+  });
+
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -80,8 +121,48 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
         {data.timedTasks.length === 0 && data.calendarEvents.length === 0 ? (
           <p className="empty-state">Встреч и временных блоков на сегодня нет.</p>
         ) : null}
-        {data.calendarEvents.map((event) => {
+        {timelineItems.map((item) => {
+          if (item.kind === "task") {
+            const { task } = item;
+
+            return (
+              <div
+                className={[
+                  "timeline-row",
+                  "timeline-task-row",
+                  item.isInactive ? "timeline-row-muted" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                key={item.id}
+              >
+                <span className="time">
+                  {formatTimeRange(task.timeBlockStart, task.timeBlockEnd)}
+                </span>
+                <span
+                  className="event-marker"
+                  style={{
+                    "--event-color":
+                      task.projectColor ?? task.streamColor ?? "#2d7dd2"
+                  } as CSSProperties}
+                />
+                <Link className="task-main" href={`/?taskId=${task.id}`}>
+                  <TaskTitle task={task} />
+                  <TaskLabels task={task} />
+                </Link>
+                <TaskDoneToggle status={task.status} taskId={task.id} />
+              </div>
+            );
+          }
+
+          const { event } = item;
           const url = getEventUrl(event);
+          const rowClassName = [
+            "timeline-row",
+            item.isInactive ? "timeline-row-muted" : ""
+          ]
+            .filter(Boolean)
+            .join(" ");
           const content = (
             <>
               <span className="time">
@@ -103,7 +184,7 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
 
           return url ? (
             <a
-              className="timeline-row"
+              className={rowClassName}
               href={url}
               key={event.id}
               rel="noreferrer"
@@ -112,29 +193,11 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
               {content}
             </a>
           ) : (
-            <div className="timeline-row" key={event.id}>
+            <div className={rowClassName} key={event.id}>
               {content}
             </div>
           );
         })}
-        {data.timedTasks.map((task) => (
-          <Link className="timeline-row" href={`/?taskId=${task.id}`} key={task.id}>
-            <span className="time">
-              {formatTimeRange(task.timeBlockStart, task.timeBlockEnd)}
-            </span>
-            <span
-              className="event-marker"
-              style={{
-                "--event-color":
-                  task.projectColor ?? task.streamColor ?? "#2d7dd2"
-              } as CSSProperties}
-            />
-            <span className="task-main">
-              <TaskTitle task={task} />
-              <TaskLabels task={task} />
-            </span>
-          </Link>
-        ))}
       </div>
     </section>
   );
