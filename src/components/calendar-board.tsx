@@ -1579,7 +1579,7 @@ export function CalendarBoard({
             >
               <SidebarDropZone list="overdue">
                 {sidebarLists.overdue.length === 0 ? (
-                  <p className="empty-state">Нет задач из прошлых недель.</p>
+                  <p className="empty-state">Нет просроченных задач.</p>
                 ) : null}
                 {sidebarLists.overdue.map((task) => (
                   <SortableCalendarTask
