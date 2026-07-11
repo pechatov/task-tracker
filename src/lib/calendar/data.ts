@@ -50,14 +50,6 @@ function addDays(date: string, days: number) {
   return formatDateInput(result);
 }
 
-function getCurrentWeekStart(dateValue: string) {
-  const date = new Date(`${dateValue}T00:00:00`);
-  const day = date.getDay();
-  const daysFromMonday = day === 0 ? 6 : day - 1;
-  date.setDate(date.getDate() - daysFromMonday);
-  return formatDateInput(date);
-}
-
 function getTaskSizeEnd(startsAt: Date, size: TaskSize) {
   const endsAt = new Date(startsAt);
   endsAt.setMinutes(endsAt.getMinutes() + getTaskSizeDurationMinutes(size));
@@ -80,7 +72,6 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
   return withDb(async (db) => {
     const userId = await requireCurrentUserId(db);
     const today = formatDateInput();
-    const weekStart = getCurrentWeekStart(today);
     const syncWindow = getCalendarSyncWindow(new Date());
     const windowStart = formatDateInput(syncWindow.startsAt);
     const windowEnd = formatDateInput(syncWindow.endsAt);
@@ -182,7 +173,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           and(
             eq(tasks.userId, userId),
             eq(tasks.status, "open"),
-            lt(tasks.dueDate, weekStart)
+            lt(tasks.dueDate, today)
           )
         )
         .orderBy(

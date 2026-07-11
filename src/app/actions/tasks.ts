@@ -144,14 +144,6 @@ function addDays(dateValue: string, days: number) {
   return formatDateInput(date);
 }
 
-function getCurrentWeekStart(dateValue: string) {
-  const date = new Date(`${dateValue}T00:00:00`);
-  const day = date.getDay();
-  const daysFromMonday = day === 0 ? 6 : day - 1;
-  date.setDate(date.getDate() - daysFromMonday);
-  return formatDateInput(date);
-}
-
 async function resolveTaskContext(
   db: Parameters<Parameters<typeof withDb>[0]>[0],
   userId: string,
@@ -670,7 +662,7 @@ export async function reorderCalendarTaskList(formData: FormData) {
 
   await withDb(async (db) => {
     const userId = await getCurrentUserId(db);
-    const weekStart = getCurrentWeekStart(formatDateInput());
+    const today = formatDateInput();
 
     await db.transaction(async (tx) => {
       for (const [index, id] of taskIds.entries()) {
@@ -681,7 +673,7 @@ export async function reorderCalendarTaskList(formData: FormData) {
             and(
               eq(tasks.id, id),
               eq(tasks.userId, userId),
-              list === "backlog" ? isNull(tasks.dueDate) : lt(tasks.dueDate, weekStart)
+              list === "backlog" ? isNull(tasks.dueDate) : lt(tasks.dueDate, today)
             )
           );
       }
