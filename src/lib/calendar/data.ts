@@ -36,6 +36,7 @@ export type CalendarItem = {
 
 export type CalendarData = {
   today: string;
+  currentTime: number;
   items: CalendarItem[];
   backlogTasks: TaskRow[];
   overdueTasks: TaskRow[];
@@ -71,8 +72,9 @@ function getEventUrl(event: { eventUrl: string | null; location: string | null }
 export async function getCalendarData(selectedTaskId?: string): Promise<CalendarData> {
   return withDb(async (db) => {
     const userId = await requireCurrentUserId(db);
-    const today = formatDateInput();
-    const syncWindow = getCalendarSyncWindow(new Date());
+    const now = new Date();
+    const today = formatDateInput(now);
+    const syncWindow = getCalendarSyncWindow(now);
     const windowStart = formatDateInput(syncWindow.startsAt);
     const windowEnd = formatDateInput(syncWindow.endsAt);
 
@@ -287,6 +289,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
 
     return {
       today,
+      currentTime: now.getTime(),
       items: [...taskItems, ...calendarItems],
       backlogTasks,
       overdueTasks,

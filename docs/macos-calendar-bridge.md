@@ -55,6 +55,10 @@ swift scripts/macos-calendar-bridge/MacosCalendarBridge.swift
 
 `TASK_TRACKER_BASE_URL` must be the normal HTTPS production app URL. For local LAN testing it can be something like `http://192.168.1.192:3002`.
 
+By default the bridge imports events from 365 days back through 90 days ahead.
+Override the window with `MACOS_CALENDAR_PAST_DAYS` and
+`MACOS_CALENDAR_FUTURE_DAYS` when needed.
+
 ## Import Filters
 
 By default the bridge skips:

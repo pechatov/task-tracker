@@ -1220,11 +1220,13 @@ a {
   white-space: normal;
 }
 
-.calendar-shell .calendar-task-event-done {
+.calendar-shell .calendar-task-event-done,
+.calendar-shell .calendar-meeting-event-past {
   opacity: 0.66;
 }
 
-.calendar-shell .calendar-task-event-done .fc-event-title-text {
+.calendar-shell .calendar-task-event-done .fc-event-title-text,
+.calendar-shell .calendar-meeting-event-past .fc-event-title-text {
   text-decoration: line-through;
   text-decoration-thickness: 1.5px;
 }

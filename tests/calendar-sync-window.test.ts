@@ -5,12 +5,12 @@ import {
 } from "../src/lib/calendar/sync-window";
 
 describe("calendar sync window", () => {
-  it("uses 60 days back and 60 days forward by default", () => {
+  it("uses 365 days back and 90 days forward by default", () => {
     const now = new Date("2026-06-29T12:00:00.000Z");
     const syncWindow = getCalendarSyncWindow(now);
 
-    expect(syncWindow.startsAt.toISOString()).toBe("2026-04-29T21:00:00.000Z");
-    expect(syncWindow.endsAt.toISOString()).toBe("2026-08-28T20:59:59.999Z");
+    expect(syncWindow.startsAt.toISOString()).toBe("2025-06-28T21:00:00.000Z");
+    expect(syncWindow.endsAt.toISOString()).toBe("2026-09-27T20:59:59.999Z");
   });
 
   it("checks whether a date is inside the sync window", () => {
@@ -26,7 +26,7 @@ describe("calendar sync window", () => {
     ).toBe(true);
     expect(
       isWithinCalendarSyncWindow(
-        new Date("2026-08-28T21:00:00.000Z"),
+        new Date("2026-09-27T21:00:00.000Z"),
         syncWindow
       )
     ).toBe(false);
