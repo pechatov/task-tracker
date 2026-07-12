@@ -85,6 +85,7 @@ import {
 type CalendarBoardProps = {
   backlogTasks: TaskRow[];
   initialDate: string;
+  initialTime: number;
   items: CalendarItem[];
   overdueTasks: TaskRow[];
 };
@@ -114,6 +115,7 @@ type CalendarTaskEventElement = HTMLElement & {
 
 const sidebarListOrder: CalendarSidebarList[] = ["backlog", "overdue"];
 const taskOpenClickDelayMs = 450;
+const calendarClockIntervalMs = 60_000;
 
 const calendarSidebarCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
@@ -279,6 +281,15 @@ function getReadableTextColor(backgroundColor: string) {
 
 function getMeetingBackgroundColor(color: string) {
   return `color-mix(in srgb, ${color} 82%, var(--surface))`;
+}
+
+function hasMeetingEnded(item: CalendarItem, currentTime: number) {
+  if (item.kind !== "calendar-event") {
+    return false;
+  }
+
+  const endsAt = Date.parse(item.end ?? item.start);
+  return Number.isFinite(endsAt) && endsAt <= currentTime;
 }
 
 function isInsideRect(rect: DOMRect | undefined, x: number, y: number) {
@@ -691,6 +702,7 @@ function SortableCalendarTask({
 export function CalendarBoard({
   backlogTasks,
   initialDate,
+  initialTime,
   items,
   overdueTasks
 }: CalendarBoardProps) {
@@ -707,6 +719,7 @@ export function CalendarBoard({
   const [sidebarLists, setSidebarListsState] =
     useState<CalendarSidebarLists>(initialSidebarLists);
   const [view, setView] = useState<CalendarView>("timeGridWeek");
+  const [currentTime, setCurrentTime] = useState(initialTime);
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatusFilter>("all");
   const [title, setTitle] = useState("");
   const [dragSource, setDragSource] = useState<DragSource>("none");
@@ -741,6 +754,14 @@ export function CalendarBoard({
     sidebarListsRef.current = resolved;
     setSidebarListsState(resolved);
   }
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTime(Date.now());
+    }, calendarClockIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -788,6 +809,7 @@ export function CalendarBoard({
         .map((item) => {
           const backgroundColor =
             item.kind === "task" ? item.color : getMeetingBackgroundColor(item.color);
+          const isPastMeeting = hasMeetingEnded(item, currentTime);
 
           return {
             id: item.id,
@@ -804,7 +826,8 @@ export function CalendarBoard({
               item.kind === "task" ? "calendar-task-event" : "calendar-meeting-event",
               item.kind === "task" && item.taskStatus === "done"
                 ? "calendar-task-event-done"
-                : ""
+                : "",
+              isPastMeeting ? "calendar-meeting-event-past" : ""
             ].filter(Boolean),
             textColor:
               item.kind === "task"
@@ -824,7 +847,7 @@ export function CalendarBoard({
           };
         })
     );
-  }, [items, taskStatusFilter, view]);
+  }, [currentTime, items, taskStatusFilter, view]);
 
   function getCalendarApi() {
     return calendarRef.current?.getApi() ?? null;

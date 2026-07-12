@@ -85,6 +85,7 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
       <CalendarBoard
         backlogTasks={data.backlogTasks}
         initialDate={data.today}
+        initialTime={data.currentTime}
         items={data.items}
         key={getCalendarBoardKey(data)}
         overdueTasks={data.overdueTasks}
