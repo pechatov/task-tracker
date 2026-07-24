@@ -572,7 +572,6 @@ async function hydrateGoogleEventCancellations(
     return [];
   }
 
-  const syncWindow = getCalendarSyncWindow();
   const cancellationById = new Map(
     cancellations.map((cancellation) => [
       cancellation.externalEventId,
@@ -597,9 +596,7 @@ async function hydrateGoogleEventCancellations(
     .where(
       and(
         eq(calendarEvents.connectedCalendarId, calendar.id),
-        inArray(calendarEvents.externalEventId, [...cancellationById.keys()]),
-        gte(calendarEvents.startsAt, syncWindow.startsAt),
-        lte(calendarEvents.startsAt, syncWindow.endsAt)
+        inArray(calendarEvents.externalEventId, [...cancellationById.keys()])
       )
     );
 
