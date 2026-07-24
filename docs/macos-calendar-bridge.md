@@ -67,6 +67,9 @@ By default the bridge skips:
 - events where the current user cannot be identified among attendees or organizer;
 - events without any participant other than the current user.
 
+Canceled events are always imported so Task Tracker can keep the meeting visible
+and mark it as canceled.
+
 For diagnostics:
 
 ```sh

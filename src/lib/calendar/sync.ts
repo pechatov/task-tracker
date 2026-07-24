@@ -41,6 +41,7 @@ import type {
   CalendarProvider,
   ConnectedCalendarSnapshot
 } from "./types";
+import { normalizeCalendarEventStatus } from "./types";
 import { getEnv } from "../env";
 import { CONTEXT_COLOR_PALETTE } from "../context/colors";
 
@@ -326,6 +327,7 @@ function contentHash(snapshot: CalendarEventSnapshot) {
         organizer: snapshot.organizer,
         attendeesSummary: snapshot.attendeesSummary,
         eventUrl: snapshot.eventUrl,
+        status: snapshot.status,
         providerUpdatedAt: snapshot.providerUpdatedAt?.toISOString()
       })
     )
@@ -372,6 +374,7 @@ async function replaceCalendarEvents(
         organizer: snapshot.organizer,
         attendeesSummary: snapshot.attendeesSummary,
         eventUrl: snapshot.eventUrl,
+        status: snapshot.status,
         providerUpdatedAt: snapshot.providerUpdatedAt,
         contentHash: snapshotHash
       })
@@ -389,6 +392,7 @@ async function replaceCalendarEvents(
           organizer: snapshot.organizer,
           attendeesSummary: snapshot.attendeesSummary,
           eventUrl: snapshot.eventUrl,
+          status: snapshot.status,
           providerUpdatedAt: snapshot.providerUpdatedAt,
           contentHash: snapshotHash,
           updatedAt: new Date()
@@ -423,11 +427,7 @@ function googleEventUrl(event: GoogleEvent) {
   return videoEntryPoint?.uri ?? event.htmlLink;
 }
 
-function mapGoogleEvent(event: GoogleEvent): CalendarEventSnapshot | null {
-  if (event.status === "cancelled") {
-    return null;
-  }
-
+export function mapGoogleEvent(event: GoogleEvent): CalendarEventSnapshot | null {
   const startsAt = parseGoogleEventDateTime(event.start);
   const endsAt = parseGoogleEventDateTime(event.end);
 
@@ -447,6 +447,7 @@ function mapGoogleEvent(event: GoogleEvent): CalendarEventSnapshot | null {
       ? `${event.attendees.length} участников`
       : undefined,
     eventUrl: googleEventUrl(event),
+    status: normalizeCalendarEventStatus(event.status),
     providerUpdatedAt: event.updated ? new Date(event.updated) : undefined
   };
 }
@@ -494,6 +495,7 @@ async function fetchGoogleCalendarEvents(
     url.searchParams.set("timeMin", syncWindow.startsAt.toISOString());
     url.searchParams.set("timeMax", syncWindow.endsAt.toISOString());
     url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("showDeleted", "true");
     url.searchParams.set("maxResults", "250");
 
     if (pageToken) {
@@ -593,6 +595,7 @@ export function mapMicrosoftEvent(
       ? `${event.attendees.length} участников`
       : undefined,
     eventUrl: microsoftEventUrl(event),
+    status: event.isCancelled ? "cancelled" : "confirmed",
     providerUpdatedAt: event.lastModifiedDateTime
       ? new Date(event.lastModifiedDateTime)
       : undefined
@@ -603,7 +606,9 @@ function extractLocationUrl(location: string | undefined) {
   return location?.match(/https?:\/\/\S+/i)?.[0];
 }
 
-function mapEwsCalendarItem(item: EwsCalendarItem): CalendarEventSnapshot | null {
+export function mapEwsCalendarItem(
+  item: EwsCalendarItem
+): CalendarEventSnapshot | null {
   const startsAt = item.start ? new Date(item.start) : null;
   const endsAt = item.end ? new Date(item.end) : null;
 
@@ -631,6 +636,10 @@ function mapEwsCalendarItem(item: EwsCalendarItem): CalendarEventSnapshot | null
     organizer: item.organizerName,
     attendeesSummary: attendeeCount ? `${attendeeCount} участников` : undefined,
     eventUrl: extractLocationUrl(item.location),
+    status:
+      item.appointmentState !== undefined && (item.appointmentState & 4) !== 0
+        ? "cancelled"
+        : "confirmed",
     providerUpdatedAt: item.lastModified ? new Date(item.lastModified) : undefined
   };
 }
@@ -749,6 +758,9 @@ function parseCalDavEvent(
     attendeesSummary: event.attendees.length
       ? `${event.attendees.length} участников`
       : undefined,
+    status: normalizeCalendarEventStatus(
+      getIcalTextValue(component, "status")?.toLowerCase()
+    ),
     providerUpdatedAt:
       getIcalDateValue(component, "last-modified") ??
       getIcalDateValue(component, "dtstamp")

@@ -29,6 +29,7 @@ type MicrosoftDateTime = {
 
 export type MicrosoftEvent = {
   id: string;
+  isCancelled?: boolean;
   subject?: string;
   start?: MicrosoftDateTime;
   end?: MicrosoftDateTime;
@@ -244,6 +245,7 @@ export async function fetchMicrosoftCalendarEvents(
     "$select",
     [
       "id",
+      "isCancelled",
       "subject",
       "start",
       "end",

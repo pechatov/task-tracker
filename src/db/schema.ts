@@ -52,6 +52,11 @@ export const calendarSourceStatus = pgEnum("calendar_source_status", [
   "disconnected"
 ]);
 
+export const calendarEventStatus = pgEnum("calendar_event_status", [
+  "confirmed",
+  "cancelled"
+]);
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
@@ -357,6 +362,7 @@ export const calendarEvents = pgTable(
     organizer: text("organizer"),
     attendeesSummary: text("attendees_summary"),
     eventUrl: text("event_url"),
+    status: calendarEventStatus("status").default("confirmed").notNull(),
     providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
     contentHash: text("content_hash"),
     ...timestamps

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { importLocalBridgeCalendarEvents } from "@/lib/calendar/sync";
-import type { CalendarEventSnapshot } from "@/lib/calendar/types";
+import {
+  normalizeCalendarEventStatus,
+  type CalendarEventSnapshot
+} from "@/lib/calendar/types";
 import { getEnv } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +19,7 @@ const eventSchema = z.object({
   organizer: z.string().optional(),
   attendeesSummary: z.string().optional(),
   eventUrl: z.string().url().optional(),
+  status: z.enum(["confirmed", "cancelled", "canceled"]).default("confirmed"),
   providerUpdatedAt: z.string().datetime({ offset: true }).optional()
 });
 
@@ -66,6 +70,7 @@ function parseEvent(
     organizer: event.organizer,
     attendeesSummary: event.attendeesSummary,
     eventUrl: event.eventUrl,
+    status: normalizeCalendarEventStatus(event.status),
     providerUpdatedAt
   };
 }

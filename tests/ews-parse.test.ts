@@ -5,6 +5,7 @@ import {
   parseEwsCalendarItems,
   parseEwsDefaultCalendarFolderId
 } from "../src/lib/calendar/ews";
+import { mapEwsCalendarItem } from "../src/lib/calendar/sync";
 
 const soapEnvelope = (body: string) =>
   `<?xml version="1.0" encoding="utf-8"?>
@@ -51,6 +52,7 @@ const findItemResponse = soapEnvelope(`
               <t:Start>2026-07-06T09:00:00Z</t:Start>
               <t:End>2026-07-06T09:30:00Z</t:End>
               <t:IsAllDayEvent>false</t:IsAllDayEvent>
+              <t:AppointmentState>5</t:AppointmentState>
               <t:Location>https://meet.example.com/room/42</t:Location>
               <t:Organizer>
                 <t:Mailbox>
@@ -116,6 +118,7 @@ describe("ews response parsing", () => {
         start: "2026-07-06T09:00:00Z",
         end: "2026-07-06T09:30:00Z",
         isAllDay: false,
+        appointmentState: 5,
         location: "https://meet.example.com/room/42",
         organizerName: "Иван Иванов",
         displayTo: "Иван Иванов; Пётр Петров",
@@ -126,6 +129,15 @@ describe("ews response parsing", () => {
 
   it("parses the default calendar folder id", () => {
     expect(parseEwsDefaultCalendarFolderId(getFolderResponse)).toBe("AAMkAGRl");
+  });
+
+  it("maps the EWS cancellation flag to a cancelled calendar snapshot", () => {
+    const [item] = parseEwsCalendarItems(findItemResponse);
+
+    expect(mapEwsCalendarItem(item)).toMatchObject({
+      status: "cancelled",
+      title: "Планёрка"
+    });
   });
 
   it("throws on error responses", () => {

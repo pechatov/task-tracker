@@ -43,6 +43,13 @@
       "when": 1783620209053,
       "tag": "0005_integration_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784891104852,
+      "tag": "0006_fresh_pestilence",
+      "breakpoints": true
     }
   ]
 }

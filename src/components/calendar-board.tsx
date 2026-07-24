@@ -809,7 +809,9 @@ export function CalendarBoard({
         .map((item) => {
           const backgroundColor =
             item.kind === "task" ? item.color : getMeetingBackgroundColor(item.color);
-          const isPastMeeting = hasMeetingEnded(item, currentTime);
+          const isPastMeeting =
+            hasMeetingEnded(item, currentTime) ||
+            item.calendarEventStatus === "cancelled";
 
           return {
             id: item.id,
@@ -842,7 +844,8 @@ export function CalendarBoard({
               taskProjectName: item.taskProjectName,
               taskProjectColor: item.taskProjectColor,
               eventUrl: item.eventUrl,
-              sourceLabel: item.sourceLabel
+              sourceLabel: item.sourceLabel,
+              calendarEventStatus: item.calendarEventStatus
             }
           };
         })
