@@ -21,6 +21,7 @@ export type EwsCalendarItem = {
   location?: string;
   organizerName?: string;
   displayTo?: string;
+  appointmentState?: number;
   lastModified?: string;
 };
 
@@ -62,6 +63,11 @@ function asArray<T>(value: T | T[] | undefined): T[] {
 
 function asText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function asInteger(value: unknown) {
+  const parsed = Number.parseInt(asText(value) ?? "", 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 // fast-xml-parser returns objects with unknown shapes; navigate defensively.
@@ -201,6 +207,7 @@ export function parseEwsCalendarItems(xml: string): EwsCalendarItem[] {
           asText(asNode(asNode(item.Organizer).Mailbox).Name) ??
           asText(asNode(asNode(item.Organizer).Mailbox).EmailAddress),
         displayTo: asText(item.DisplayTo),
+        appointmentState: asInteger(item.AppointmentState),
         lastModified: asText(item.LastModifiedTime)
       }
     ];
@@ -255,6 +262,7 @@ export async function fetchEwsCalendarItems(
       '<t:FieldURI FieldURI="calendar:Location"/>' +
       '<t:FieldURI FieldURI="calendar:Organizer"/>' +
       '<t:FieldURI FieldURI="item:DisplayTo"/>' +
+      '<t:FieldURI FieldURI="calendar:AppointmentState"/>' +
       '<t:FieldURI FieldURI="item:LastModifiedTime"/>' +
       "</t:AdditionalProperties>" +
       "</m:ItemShape>" +

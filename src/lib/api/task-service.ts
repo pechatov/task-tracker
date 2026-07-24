@@ -26,6 +26,10 @@ import {
   parseDateInputValue,
   startOfMoscowDate
 } from "@/lib/date";
+import {
+  formatCalendarEventTitle,
+  type CalendarEventStatus
+} from "@/lib/calendar/types";
 import { getNextDayPriority } from "@/lib/tasks/data";
 import { isTaskSize, type TaskSize } from "@/lib/tasks/size";
 import { isTaskStatus, type TaskStatus } from "@/lib/tasks/status";
@@ -85,6 +89,7 @@ export type ApiCalendarItem =
       id: string;
       kind: "calendar-event";
       location: string | null;
+      status: CalendarEventStatus;
       sourceLabel: string;
       start: string;
       title: string;
@@ -741,6 +746,7 @@ export async function getCalendarPlanForUser(
       isAllDay: calendarEvents.isAllDay,
       location: calendarEvents.location,
       startsAt: calendarEvents.startsAt,
+      status: calendarEvents.status,
       title: calendarEvents.title
     })
     .from(calendarEvents)
@@ -788,13 +794,14 @@ export async function getCalendarPlanForUser(
   const eventItems: ApiCalendarItem[] = eventRows.map((event) => ({
     id: `calendar-event-${event.id}`,
     kind: "calendar-event",
-    title: event.title,
+    title: formatCalendarEventTitle(event.title, event.status),
     start: event.startsAt.toISOString(),
     end: event.endsAt.toISOString(),
     allDay: event.isAllDay,
     editable: false,
     location: event.location,
     eventUrl: event.eventUrl,
+    status: event.status,
     sourceLabel: event.calendarName
   }));
 

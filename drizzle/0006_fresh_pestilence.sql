@@ -1,0 +1,2 @@
+CREATE TYPE "public"."calendar_event_status" AS ENUM('confirmed', 'cancelled');--> statement-breakpoint
+ALTER TABLE "calendar_events" ADD COLUMN "status" "calendar_event_status" DEFAULT 'confirmed' NOT NULL;

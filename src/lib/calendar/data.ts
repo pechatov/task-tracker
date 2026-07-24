@@ -9,6 +9,10 @@ import {
 } from "@/db/schema";
 import { requireCurrentUserId } from "@/lib/auth/session";
 import { getCalendarSyncWindow } from "@/lib/calendar/sync-window";
+import {
+  formatCalendarEventTitle,
+  type CalendarEventStatus
+} from "@/lib/calendar/types";
 import { formatDateInput } from "@/lib/date";
 import { ensureRecurringTaskInstances } from "@/lib/recurring-tasks/data";
 import type { ProjectOption, StreamOption, TaskRow } from "@/lib/tasks/data";
@@ -32,6 +36,7 @@ export type CalendarItem = {
   taskIsRecurring: boolean;
   eventUrl: string | null;
   sourceLabel: string | null;
+  calendarEventStatus: CalendarEventStatus | null;
 };
 
 export type CalendarData = {
@@ -191,6 +196,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           endsAt: calendarEvents.endsAt,
           isAllDay: calendarEvents.isAllDay,
           eventUrl: calendarEvents.eventUrl,
+          status: calendarEvents.status,
           location: calendarEvents.location,
           calendarName: connectedCalendars.name,
           calendarColor: connectedCalendars.color
@@ -240,7 +246,8 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           taskProjectColor: task.projectColor,
           taskIsRecurring: task.recurringTaskId !== null,
           eventUrl: null,
-          sourceLabel: null
+          sourceLabel: null,
+          calendarEventStatus: null
         };
       }
 
@@ -264,14 +271,15 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
         taskProjectColor: task.projectColor,
         taskIsRecurring: task.recurringTaskId !== null,
         eventUrl: null,
-        sourceLabel: null
+        sourceLabel: null,
+        calendarEventStatus: null
       };
     });
 
     const calendarItems: CalendarItem[] = eventRows.map((event) => ({
       id: `calendar-event-${event.id}`,
       kind: "calendar-event",
-      title: event.title,
+      title: formatCalendarEventTitle(event.title, event.status),
       start: event.startsAt.toISOString(),
       end: event.endsAt.toISOString(),
       allDay: event.isAllDay,
@@ -284,7 +292,8 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       taskProjectColor: null,
       taskIsRecurring: false,
       eventUrl: getEventUrl(event),
-      sourceLabel: event.calendarName
+      sourceLabel: event.calendarName,
+      calendarEventStatus: event.status
     }));
 
     return {

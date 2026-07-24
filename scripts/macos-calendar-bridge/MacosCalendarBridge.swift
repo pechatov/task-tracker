@@ -35,6 +35,7 @@ struct CalendarEventPayload: Encodable {
     let organizer: String?
     let attendeesSummary: String?
     let eventUrl: String?
+    let status: String
     let providerUpdatedAt: String?
 }
 
@@ -333,6 +334,11 @@ func debugFilterDecision(_ event: EKEvent, options: Options, decision: String) {
 }
 
 func shouldImportEvent(_ event: EKEvent, options: Options) -> (Bool, String?) {
+    if event.status == .canceled {
+        debugFilterDecision(event, options: options, decision: "keep canceled")
+        return (true, nil)
+    }
+
     if !options.includeSoloEvents && !hasParticipantOtherThanCurrentUser(event, options: options) {
         debugFilterDecision(event, options: options, decision: "skip solo")
         return (false, "solo")
@@ -370,6 +376,7 @@ func eventPayload(_ event: EKEvent, calendar: EKCalendar) -> CalendarEventPayloa
         organizer: organizerName,
         attendeesSummary: attendeeCount > 0 ? "\(attendeeCount) участников" : nil,
         eventUrl: event.url?.absoluteString,
+        status: event.status == .canceled ? "cancelled" : "confirmed",
         providerUpdatedAt: event.lastModifiedDate.map { isoFormatter.string(from: $0) }
     )
 }

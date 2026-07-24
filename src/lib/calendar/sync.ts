@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import ICAL from "ical.js";
 import {
   createDAVClient,
@@ -41,6 +41,7 @@ import type {
   CalendarProvider,
   ConnectedCalendarSnapshot
 } from "./types";
+import { normalizeCalendarEventStatus } from "./types";
 import { getEnv } from "../env";
 import { CONTEXT_COLOR_PALETTE } from "../context/colors";
 
@@ -99,6 +100,11 @@ type GoogleEvent = {
     }[];
   };
   updated?: string;
+};
+
+type CalendarEventCancellation = {
+  externalEventId: string;
+  providerUpdatedAt?: Date;
 };
 
 const googleScopes = [
@@ -326,6 +332,7 @@ function contentHash(snapshot: CalendarEventSnapshot) {
         organizer: snapshot.organizer,
         attendeesSummary: snapshot.attendeesSummary,
         eventUrl: snapshot.eventUrl,
+        status: snapshot.status,
         providerUpdatedAt: snapshot.providerUpdatedAt?.toISOString()
       })
     )
@@ -372,6 +379,7 @@ async function replaceCalendarEvents(
         organizer: snapshot.organizer,
         attendeesSummary: snapshot.attendeesSummary,
         eventUrl: snapshot.eventUrl,
+        status: snapshot.status,
         providerUpdatedAt: snapshot.providerUpdatedAt,
         contentHash: snapshotHash
       })
@@ -389,6 +397,7 @@ async function replaceCalendarEvents(
           organizer: snapshot.organizer,
           attendeesSummary: snapshot.attendeesSummary,
           eventUrl: snapshot.eventUrl,
+          status: snapshot.status,
           providerUpdatedAt: snapshot.providerUpdatedAt,
           contentHash: snapshotHash,
           updatedAt: new Date()
@@ -423,11 +432,7 @@ function googleEventUrl(event: GoogleEvent) {
   return videoEntryPoint?.uri ?? event.htmlLink;
 }
 
-function mapGoogleEvent(event: GoogleEvent): CalendarEventSnapshot | null {
-  if (event.status === "cancelled") {
-    return null;
-  }
-
+export function mapGoogleEvent(event: GoogleEvent): CalendarEventSnapshot | null {
   const startsAt = parseGoogleEventDateTime(event.start);
   const endsAt = parseGoogleEventDateTime(event.end);
 
@@ -447,7 +452,38 @@ function mapGoogleEvent(event: GoogleEvent): CalendarEventSnapshot | null {
       ? `${event.attendees.length} участников`
       : undefined,
     eventUrl: googleEventUrl(event),
+    status: normalizeCalendarEventStatus(event.status),
     providerUpdatedAt: event.updated ? new Date(event.updated) : undefined
+  };
+}
+
+export function mapGoogleEventCancellation(
+  event: GoogleEvent
+): CalendarEventCancellation | null {
+  if (normalizeCalendarEventStatus(event.status) !== "cancelled") {
+    return null;
+  }
+
+  const providerUpdatedAt = event.updated ? new Date(event.updated) : undefined;
+
+  return {
+    externalEventId: event.id,
+    providerUpdatedAt:
+      providerUpdatedAt && !Number.isNaN(providerUpdatedAt.getTime())
+        ? providerUpdatedAt
+        : undefined
+  };
+}
+
+export function applyCalendarEventCancellation(
+  snapshot: CalendarEventSnapshot,
+  cancellation: CalendarEventCancellation
+): CalendarEventSnapshot {
+  return {
+    ...snapshot,
+    status: "cancelled",
+    providerUpdatedAt:
+      cancellation.providerUpdatedAt ?? snapshot.providerUpdatedAt
   };
 }
 
@@ -483,6 +519,7 @@ async function fetchGoogleCalendarEvents(
 ) {
   const syncWindow = getCalendarSyncWindow();
   const snapshots: CalendarEventSnapshot[] = [];
+  const cancellations: CalendarEventCancellation[] = [];
   let pageToken = "";
 
   do {
@@ -494,6 +531,7 @@ async function fetchGoogleCalendarEvents(
     url.searchParams.set("timeMin", syncWindow.startsAt.toISOString());
     url.searchParams.set("timeMax", syncWindow.endsAt.toISOString());
     url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("showDeleted", "true");
     url.searchParams.set("maxResults", "250");
 
     if (pageToken) {
@@ -510,13 +548,76 @@ async function fetchGoogleCalendarEvents(
 
       if (snapshot) {
         snapshots.push(snapshot);
+      } else {
+        const cancellation = mapGoogleEventCancellation(event);
+
+        if (cancellation) {
+          cancellations.push(cancellation);
+        }
       }
     }
 
     pageToken = page.nextPageToken ?? "";
   } while (pageToken);
 
-  return snapshots;
+  return { cancellations, snapshots };
+}
+
+async function hydrateGoogleEventCancellations(
+  db: Db,
+  calendar: ConnectedCalendarRecord,
+  cancellations: CalendarEventCancellation[]
+) {
+  if (cancellations.length === 0) {
+    return [];
+  }
+
+  const cancellationById = new Map(
+    cancellations.map((cancellation) => [
+      cancellation.externalEventId,
+      cancellation
+    ])
+  );
+  const existingEvents = await db
+    .select({
+      externalEventId: calendarEvents.externalEventId,
+      title: calendarEvents.title,
+      startsAt: calendarEvents.startsAt,
+      endsAt: calendarEvents.endsAt,
+      isAllDay: calendarEvents.isAllDay,
+      location: calendarEvents.location,
+      organizer: calendarEvents.organizer,
+      attendeesSummary: calendarEvents.attendeesSummary,
+      eventUrl: calendarEvents.eventUrl,
+      status: calendarEvents.status,
+      providerUpdatedAt: calendarEvents.providerUpdatedAt
+    })
+    .from(calendarEvents)
+    .where(
+      and(
+        eq(calendarEvents.connectedCalendarId, calendar.id),
+        inArray(calendarEvents.externalEventId, [...cancellationById.keys()])
+      )
+    );
+
+  return existingEvents.map((event) => {
+    const cancellation = cancellationById.get(event.externalEventId)!;
+    const snapshot: CalendarEventSnapshot = {
+      externalEventId: event.externalEventId,
+      title: event.title,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      isAllDay: event.isAllDay,
+      location: event.location ?? undefined,
+      organizer: event.organizer ?? undefined,
+      attendeesSummary: event.attendeesSummary ?? undefined,
+      eventUrl: event.eventUrl ?? undefined,
+      status: event.status,
+      providerUpdatedAt: event.providerUpdatedAt ?? undefined
+    };
+
+    return applyCalendarEventCancellation(snapshot, cancellation);
+  });
 }
 
 async function syncGoogleSource(db: Db, source: CalendarSourceRecord) {
@@ -536,11 +637,19 @@ async function syncGoogleSource(db: Db, source: CalendarSourceRecord) {
   const localCalendars = await upsertConnectedCalendars(db, source, snapshots);
 
   for (const calendar of localCalendars.filter((item) => item.isEnabled)) {
-    const events = await fetchGoogleCalendarEvents(
+    const batch = await fetchGoogleCalendarEvents(
       credentials.accessToken,
       calendar.externalCalendarId
     );
-    await replaceCalendarEvents(db, source, calendar, events);
+    const cancelledEvents = await hydrateGoogleEventCancellations(
+      db,
+      calendar,
+      batch.cancellations
+    );
+    await replaceCalendarEvents(db, source, calendar, [
+      ...batch.snapshots,
+      ...cancelledEvents
+    ]);
   }
 }
 
@@ -593,6 +702,7 @@ export function mapMicrosoftEvent(
       ? `${event.attendees.length} участников`
       : undefined,
     eventUrl: microsoftEventUrl(event),
+    status: event.isCancelled ? "cancelled" : "confirmed",
     providerUpdatedAt: event.lastModifiedDateTime
       ? new Date(event.lastModifiedDateTime)
       : undefined
@@ -603,7 +713,9 @@ function extractLocationUrl(location: string | undefined) {
   return location?.match(/https?:\/\/\S+/i)?.[0];
 }
 
-function mapEwsCalendarItem(item: EwsCalendarItem): CalendarEventSnapshot | null {
+export function mapEwsCalendarItem(
+  item: EwsCalendarItem
+): CalendarEventSnapshot | null {
   const startsAt = item.start ? new Date(item.start) : null;
   const endsAt = item.end ? new Date(item.end) : null;
 
@@ -631,6 +743,10 @@ function mapEwsCalendarItem(item: EwsCalendarItem): CalendarEventSnapshot | null
     organizer: item.organizerName,
     attendeesSummary: attendeeCount ? `${attendeeCount} участников` : undefined,
     eventUrl: extractLocationUrl(item.location),
+    status:
+      item.appointmentState !== undefined && (item.appointmentState & 4) !== 0
+        ? "cancelled"
+        : "confirmed",
     providerUpdatedAt: item.lastModified ? new Date(item.lastModified) : undefined
   };
 }
@@ -749,6 +865,9 @@ function parseCalDavEvent(
     attendeesSummary: event.attendees.length
       ? `${event.attendees.length} участников`
       : undefined,
+    status: normalizeCalendarEventStatus(
+      getIcalTextValue(component, "status")?.toLowerCase()
+    ),
     providerUpdatedAt:
       getIcalDateValue(component, "last-modified") ??
       getIcalDateValue(component, "dtstamp")
