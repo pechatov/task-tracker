@@ -11,6 +11,7 @@ import {
 import {
   connectExchangeCalendar,
   connectYandexCalendar,
+  deleteConnectedCalendar,
   disconnectCalendarSource,
   syncCalendarSourceAction,
   toggleConnectedCalendar,
@@ -278,32 +279,50 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                       className="connected-calendar-row"
                       key={calendar.id}
                     >
-                      <form
-                        action={toggleConnectedCalendar}
-                        className="connected-calendar-toggle-form"
-                      >
-                        <input name="calendarId" type="hidden" value={calendar.id} />
-                        <label>
-                          <input
-                            defaultChecked={calendar.isEnabled}
-                            name="isEnabled"
-                            type="checkbox"
-                          />
-                          <span
-                            className="color-dot"
-                            style={
-                              { "--context-color": calendar.color } as CSSProperties
-                            }
-                          />
-                          <span>
-                            {calendar.name}
-                            {calendar.isPrimary ? " · основной" : ""}
-                          </span>
-                        </label>
-                        <button className="secondary-button compact-button" type="submit">
-                          Сохранить
-                        </button>
-                      </form>
+                      <div className="connected-calendar-main">
+                        <form
+                          action={toggleConnectedCalendar}
+                          className="connected-calendar-toggle-form"
+                        >
+                          <input name="calendarId" type="hidden" value={calendar.id} />
+                          <label>
+                            <input
+                              defaultChecked={calendar.isEnabled}
+                              name="isEnabled"
+                              type="checkbox"
+                            />
+                            <span
+                              className="color-dot"
+                              style={
+                                { "--context-color": calendar.color } as CSSProperties
+                              }
+                            />
+                            <span>
+                              {calendar.name}
+                              {calendar.isPrimary ? " · основной" : ""}
+                            </span>
+                          </label>
+                          <button className="secondary-button compact-button" type="submit">
+                            Сохранить
+                          </button>
+                        </form>
+                        {source.canDeleteCalendars ? (
+                          <form action={deleteConnectedCalendar}>
+                            <input
+                              name="calendarId"
+                              type="hidden"
+                              value={calendar.id}
+                            />
+                            <button
+                              aria-label={`Удалить календарь ${calendar.name}`}
+                              className="icon-button danger-icon"
+                              type="submit"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
 
                       <form
                         action={updateConnectedCalendarColor}

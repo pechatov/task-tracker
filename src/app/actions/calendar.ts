@@ -194,6 +194,56 @@ export async function toggleConnectedCalendar(formData: FormData) {
   revalidateCalendarViews();
 }
 
+export async function deleteConnectedCalendar(formData: FormData) {
+  const calendarId = getString(formData, "calendarId");
+
+  if (!calendarId) {
+    throw new Error("Connected calendar id is required");
+  }
+
+  await withDb(async (db) => {
+    const userId = await requireCurrentUserId(db);
+    const calendar = await db.query.connectedCalendars.findFirst({
+      where: and(
+        eq(connectedCalendars.id, calendarId),
+        eq(connectedCalendars.userId, userId)
+      )
+    });
+
+    if (!calendar) {
+      throw new Error("Connected calendar not found");
+    }
+
+    const source = await db.query.calendarSources.findFirst({
+      where: and(
+        eq(calendarSources.id, calendar.sourceId),
+        eq(calendarSources.userId, userId)
+      )
+    });
+
+    // Only bridge-fed calendars accumulate stale instances; provider-synced
+    // calendars would be recreated on the next sync anyway.
+    if (
+      source?.provider !== "local_bridge" &&
+      source?.provider !== "browser_session"
+    ) {
+      throw new Error("Only bridge calendars can be deleted");
+    }
+
+    // calendar_events cascade on connected_calendar_id.
+    await db
+      .delete(connectedCalendars)
+      .where(
+        and(
+          eq(connectedCalendars.id, calendarId),
+          eq(connectedCalendars.userId, userId)
+        )
+      );
+  });
+
+  revalidateCalendarViews();
+}
+
 export async function updateConnectedCalendarColor(formData: FormData) {
   const calendarId = getString(formData, "calendarId");
   const color = (getString(formData, "color") || getString(formData, "customColor"))
