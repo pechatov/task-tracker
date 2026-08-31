@@ -46,7 +46,11 @@ function getCreateDefaults(params: Awaited<CalendarPageProps["searchParams"]>) {
   const end = parseSlotDate(getFirst(params.end), allDay);
 
   if (!start) {
-    return null;
+    return {
+      dueDate: null,
+      timeBlockStart: null,
+      timeBlockEnd: null
+    };
   }
 
   return {

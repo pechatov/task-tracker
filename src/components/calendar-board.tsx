@@ -51,6 +51,7 @@ import {
   ExternalLink,
   GripVertical,
   Inbox,
+  Plus,
   Repeat2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -1558,7 +1559,18 @@ export function CalendarBoard({
               <div>
                 <h2>Бэклог</h2>
               </div>
-              <Inbox size={20} />
+              <div className="panel-heading-actions">
+                <button
+                  aria-label="Добавить задачу в бэклог"
+                  className="icon-button"
+                  onClick={() => router.push("/calendar?create=task")}
+                  title="Добавить задачу в бэклог"
+                  type="button"
+                >
+                  <Plus size={18} />
+                </button>
+                <Inbox size={20} />
+              </div>
             </div>
             {dragSource === "calendar" ? (
               <div className="backlog-drop-overlay">
