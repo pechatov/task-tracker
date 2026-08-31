@@ -334,11 +334,6 @@ func debugFilterDecision(_ event: EKEvent, options: Options, decision: String) {
 }
 
 func shouldImportEvent(_ event: EKEvent, options: Options) -> (Bool, String?) {
-    if event.status == .canceled {
-        debugFilterDecision(event, options: options, decision: "keep canceled")
-        return (true, nil)
-    }
-
     if !options.includeSoloEvents && !hasParticipantOtherThanCurrentUser(event, options: options) {
         debugFilterDecision(event, options: options, decision: "skip solo")
         return (false, "solo")

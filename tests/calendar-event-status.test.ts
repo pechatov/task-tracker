@@ -1,15 +1,47 @@
 import { describe, expect, it } from "vitest";
 import {
   applyCalendarEventCancellation,
+  dropCancelledCalendarEventSnapshots,
   mapGoogleEvent,
   mapGoogleEventCancellation
 } from "../src/lib/calendar/sync";
 import {
   formatCalendarEventTitle,
+  hasCancelledTitlePrefix,
   normalizeCalendarEventStatus
 } from "../src/lib/calendar/types";
 
 describe("calendar event status", () => {
+  it("drops cancelled snapshots so they are removed from the tracker", () => {
+    const base = {
+      title: "ml section sync",
+      startsAt: new Date("2026-08-31T09:00:00Z"),
+      endsAt: new Date("2026-08-31T10:00:00Z"),
+      isAllDay: false
+    };
+    const kept = dropCancelledCalendarEventSnapshots([
+      { ...base, externalEventId: "event-1", status: "confirmed" },
+      { ...base, externalEventId: "event-2", status: "cancelled" },
+      {
+        ...base,
+        externalEventId: "event-3",
+        title: "Отменено: AI Center Technical Townhall",
+        status: "confirmed"
+      }
+    ]);
+
+    expect(kept.map((snapshot) => snapshot.externalEventId)).toEqual([
+      "event-1"
+    ]);
+  });
+
+  it("detects Outlook cancellation title prefixes", () => {
+    expect(hasCancelledTitlePrefix("Отменено: AI Center Technical Townhall")).toBe(true);
+    expect(hasCancelledTitlePrefix("Canceled: weekly sync")).toBe(true);
+    expect(hasCancelledTitlePrefix("Cancelled: weekly sync")).toBe(true);
+    expect(hasCancelledTitlePrefix("ml section sync")).toBe(false);
+  });
+
   it("normalizes both cancellation spellings", () => {
     expect(normalizeCalendarEventStatus("cancelled")).toBe("cancelled");
     expect(normalizeCalendarEventStatus("canceled")).toBe("cancelled");
