@@ -67,8 +67,13 @@ By default the bridge skips:
 - events where the current user cannot be identified among attendees or organizer;
 - events without any participant other than the current user.
 
-Canceled events are always imported so Task Tracker can keep the meeting visible
-and mark it as canceled.
+Canceled events pass through the same filters as regular events. When a meeting
+is canceled (or was never accepted), the bridge stops sending it, so Task
+Tracker deletes it from the calendar on the next sync. If a canceled event is
+still sent, the server drops it as well: either by `status: "cancelled"` or by
+the localized Outlook subject prefix ("Canceled:", "Cancelled:", "Отменено:"),
+since Exchange cancellations often keep a confirmed status and only rename the
+subject.
 
 For diagnostics:
 

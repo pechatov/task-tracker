@@ -41,7 +41,10 @@ import type {
   CalendarProvider,
   ConnectedCalendarSnapshot
 } from "./types";
-import { normalizeCalendarEventStatus } from "./types";
+import {
+  hasCancelledTitlePrefix,
+  normalizeCalendarEventStatus
+} from "./types";
 import { getEnv } from "../env";
 import { CONTEXT_COLOR_PALETTE } from "../context/colors";
 
@@ -339,6 +342,15 @@ function contentHash(snapshot: CalendarEventSnapshot) {
     .digest("hex");
 }
 
+export function dropCancelledCalendarEventSnapshots(
+  snapshots: CalendarEventSnapshot[]
+) {
+  return snapshots.filter(
+    (snapshot) =>
+      snapshot.status !== "cancelled" && !hasCancelledTitlePrefix(snapshot.title)
+  );
+}
+
 async function replaceCalendarEvents(
   db: Db,
   source: CalendarSourceRecord,
@@ -346,6 +358,9 @@ async function replaceCalendarEvents(
   snapshots: CalendarEventSnapshot[]
 ) {
   const syncWindow = getCalendarSyncWindow();
+  // Cancelled meetings must disappear from the tracker: the windowed delete
+  // below removes their stored rows and we never re-insert them.
+  const activeSnapshots = dropCancelledCalendarEventSnapshots(snapshots);
 
   await db
     .delete(calendarEvents)
@@ -357,11 +372,11 @@ async function replaceCalendarEvents(
       )
     );
 
-  if (snapshots.length === 0) {
+  if (activeSnapshots.length === 0) {
     return;
   }
 
-  for (const snapshot of snapshots) {
+  for (const snapshot of activeSnapshots) {
     const snapshotHash = contentHash(snapshot);
 
     await db

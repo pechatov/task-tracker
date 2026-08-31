@@ -13,6 +13,7 @@ export type CalendarSettingsSource = {
   id: string;
   accountEmail: string | null;
   calendars: CalendarSettingsCalendar[];
+  canDeleteCalendars: boolean;
   displayName: string;
   lastSyncedAt: string | null;
   providerLabel: string;
@@ -84,6 +85,9 @@ export async function getCalendarSettingsData(): Promise<CalendarSettingsData> {
             isPrimary: calendar.isPrimary,
             name: calendar.name
           })),
+        canDeleteCalendars:
+          source.provider === "local_bridge" ||
+          source.provider === "browser_session",
         displayName: source.displayName,
         lastSyncedAt: getLastSyncedAt(source.syncState),
         providerLabel: getCalendarProviderLabel(source.provider),

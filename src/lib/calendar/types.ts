@@ -16,6 +16,20 @@ export function normalizeCalendarEventStatus(
     : "confirmed";
 }
 
+// Exchange/Outlook cancellations often keep STATUS=CONFIRMED and only rename
+// the subject, so the localized title prefix is the reliable signal.
+const cancelledTitlePrefixes = [
+  "canceled:",
+  "cancelled:",
+  "отменено:",
+  "отменена:"
+];
+
+export function hasCancelledTitlePrefix(title: string) {
+  const normalized = title.trim().toLowerCase();
+  return cancelledTitlePrefixes.some((prefix) => normalized.startsWith(prefix));
+}
+
 export function formatCalendarEventTitle(
   title: string,
   status: CalendarEventStatus

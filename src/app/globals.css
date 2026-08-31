@@ -1528,6 +1528,17 @@ a {
   justify-content: space-between;
 }
 
+.connected-calendar-main {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.connected-calendar-main .connected-calendar-toggle-form {
+  flex: 1;
+  min-width: 0;
+}
+
 .connected-calendar-toggle-form,
 .calendar-color-form {
   align-items: center;
