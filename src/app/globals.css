@@ -419,6 +419,12 @@ a {
   gap: 12px;
 }
 
+.panel-heading-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
 .counter,
 .sync-pill,
 .label {
