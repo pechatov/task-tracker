@@ -138,7 +138,7 @@ export function useTaskContextMenu({
           id: "today",
           label: "На сегодня",
           icon: CalendarCheck,
-          onSelect: () => run(moveTaskToDay, makeTaskFormData(task.id, { day: "today" }))
+          onSelect: () => run(moveTaskToDay, makeTaskFormData(task.id, { dueDate: today }))
         });
       }
 
@@ -148,7 +148,7 @@ export function useTaskContextMenu({
           label: "На завтра",
           icon: ArrowRight,
           onSelect: () =>
-            run(moveTaskToDay, makeTaskFormData(task.id, { day: "tomorrow" }))
+            run(moveTaskToDay, makeTaskFormData(task.id, { dueDate: tomorrow }))
         });
       }
 

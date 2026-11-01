@@ -563,31 +563,23 @@ export async function setTaskStatus(formData: FormData) {
   revalidatePath("/projects");
 }
 
-function getRelativeDay(formData: FormData) {
-  const value = getString(formData, "day");
+function getTargetDueDate(formData: FormData) {
+  const value = getString(formData, "dueDate");
 
-  if (value === "today") {
-    return 0;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Due date must use yyyy-mm-dd format");
   }
 
-  if (value === "tomorrow") {
-    return 1;
-  }
-
-  throw new Error("Day must be today or tomorrow");
+  return parseDateInputValue(value);
 }
 
-function addDaysToDateInput(dateValue: string, days: number) {
-  const result = new Date(`${dateValue}T00:00:00.000Z`);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result.toISOString().slice(0, 10);
-}
-
-// Moves a task to today or tomorrow. A task with a time block keeps its
-// clock time and duration on the new day; an all-day task stays all-day.
+// Moves a task to the given day. The context menu sends the exact date it
+// showed as today or tomorrow, so the label and the result always match.
+// A task with a time block keeps its clock time and duration on the new day;
+// an all-day task stays all-day.
 export async function moveTaskToDay(formData: FormData) {
   const taskId = getString(formData, "taskId");
-  const dueDate = addDaysToDateInput(formatDateInput(), getRelativeDay(formData));
+  const dueDate = getTargetDueDate(formData);
 
   if (!taskId) {
     throw new Error("Task id is required");
