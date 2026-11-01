@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { deleteTask } from "@/app/actions/tasks";
 import { QuickAddTask } from "@/components/quick-add-task";
+import { TaskContextMenuTrigger } from "@/components/task-context-menu";
 import { TaskDoneToggle } from "@/components/task-done-toggle";
 import { TaskLabels } from "@/components/task-labels";
 import { TaskForm } from "@/components/task-form";
@@ -126,32 +127,37 @@ function TodayMeetingsPanel({ data }: { data: TodayData }) {
             const { task } = item;
 
             return (
-              <div
-                className={[
-                  "timeline-row",
-                  "timeline-task-row",
-                  item.isInactive ? "timeline-row-muted" : ""
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+              <TaskContextMenuTrigger
                 key={item.id}
+                openHref={`/?taskId=${task.id}`}
+                task={task}
               >
-                <span className="time">
-                  {formatTimeRange(task.timeBlockStart, task.timeBlockEnd)}
-                </span>
-                <span
-                  className="event-marker"
-                  style={{
-                    "--event-color":
-                      task.projectColor ?? task.streamColor ?? "#2d7dd2"
-                  } as CSSProperties}
-                />
-                <Link className="task-main" href={`/?taskId=${task.id}`}>
-                  <TaskTitle task={task} />
-                  <TaskLabels task={task} />
-                </Link>
-                <TaskDoneToggle status={task.status} taskId={task.id} />
-              </div>
+                <div
+                  className={[
+                    "timeline-row",
+                    "timeline-task-row",
+                    item.isInactive ? "timeline-row-muted" : ""
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <span className="time">
+                    {formatTimeRange(task.timeBlockStart, task.timeBlockEnd)}
+                  </span>
+                  <span
+                    className="event-marker"
+                    style={{
+                      "--event-color":
+                        task.projectColor ?? task.streamColor ?? "#2d7dd2"
+                    } as CSSProperties}
+                  />
+                  <Link className="task-main" href={`/?taskId=${task.id}`}>
+                    <TaskTitle task={task} />
+                    <TaskLabels task={task} />
+                  </Link>
+                  <TaskDoneToggle status={task.status} taskId={task.id} />
+                </div>
+              </TaskContextMenuTrigger>
             );
           }
 

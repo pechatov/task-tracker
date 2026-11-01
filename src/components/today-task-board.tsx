@@ -46,6 +46,7 @@ import {
 } from "@/app/actions/tasks";
 import { formatDisplayDate } from "@/lib/date";
 import type { TaskRow } from "@/lib/tasks/data";
+import { TaskContextMenuTrigger } from "@/components/task-context-menu";
 import { TaskLabels } from "@/components/task-labels";
 import { TaskDoneToggle } from "@/components/task-done-toggle";
 import { TaskTitle } from "@/components/task-title";
@@ -439,12 +440,17 @@ function TaskColumnSection({
             <p className="empty-state">{emptyText}</p>
           ) : null}
           {tasks.map((task, index) => (
-            <SortableTaskRow
-              column={column}
+            <TaskContextMenuTrigger
               key={task.id}
-              priority={column === "today" ? index + 1 : undefined}
+              openHref={`/?taskId=${task.id}`}
               task={task}
-            />
+            >
+              <SortableTaskRow
+                column={column}
+                priority={column === "today" ? index + 1 : undefined}
+                task={task}
+              />
+            </TaskContextMenuTrigger>
           ))}
         </div>
       </SortableContext>

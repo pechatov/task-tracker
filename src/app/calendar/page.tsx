@@ -60,17 +60,6 @@ function getCreateDefaults(params: Awaited<CalendarPageProps["searchParams"]>) {
   };
 }
 
-function getCalendarBoardKey(data: Awaited<ReturnType<typeof getCalendarData>>) {
-  return [
-    ...data.backlogTasks.map(
-      (task) => `backlog:${task.id}:${task.title}:${task.dayPriority}`
-    ),
-    ...data.overdueTasks.map(
-      (task) => `overdue:${task.id}:${task.title}:${task.dueDate}:${task.dayPriority}`
-    )
-  ].join("|");
-}
-
 export default async function CalendarPage({ searchParams }: CalendarPageProps) {
   await requireCurrentUser();
   const params = await searchParams;
@@ -91,7 +80,6 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
         initialDate={data.today}
         initialTime={data.currentTime}
         items={data.items}
-        key={getCalendarBoardKey(data)}
         overdueTasks={data.overdueTasks}
       />
 

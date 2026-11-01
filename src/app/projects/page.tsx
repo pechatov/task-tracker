@@ -16,6 +16,7 @@ import {
   updateProject,
   updateStream
 } from "@/app/actions/projects";
+import { TaskContextMenuTrigger } from "@/components/task-context-menu";
 import { TaskForm } from "@/components/task-form";
 import { TaskTitle } from "@/components/task-title";
 import { formatDisplayDate, formatDisplayTime } from "@/lib/date";
@@ -112,24 +113,28 @@ function ProjectTaskRow({
 }) {
   const isDone = task.status === "done";
 
+  const href = `/projects?projectId=${projectId}&taskId=${task.id}` as const;
+
   return (
-    <Link
-      className={isDone ? "project-task-row done" : "project-task-row"}
-      href={`/projects?projectId=${projectId}&taskId=${task.id}`}
-    >
-      <span className="project-task-status" aria-hidden="true">
-        {isDone ? <CheckCircle2 size={17} /> : <Circle size={17} />}
-      </span>
-      <span className="task-main">
-        <TaskTitle task={task} />
-        <span className="task-meta-row">
-          <span className={task.dueDate ? "date-chip" : "status-badge"}>
-            {getTaskScheduleLabel(task)}
-          </span>
-          <span className="muted">{taskSizeLabels[task.size]}</span>
+    <TaskContextMenuTrigger openHref={href} task={task}>
+      <Link
+        className={isDone ? "project-task-row done" : "project-task-row"}
+        href={href}
+      >
+        <span className="project-task-status" aria-hidden="true">
+          {isDone ? <CheckCircle2 size={17} /> : <Circle size={17} />}
         </span>
-      </span>
-    </Link>
+        <span className="task-main">
+          <TaskTitle task={task} />
+          <span className="task-meta-row">
+            <span className={task.dueDate ? "date-chip" : "status-badge"}>
+              {getTaskScheduleLabel(task)}
+            </span>
+            <span className="muted">{taskSizeLabels[task.size]}</span>
+          </span>
+        </span>
+      </Link>
+    </TaskContextMenuTrigger>
   );
 }
 
