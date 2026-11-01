@@ -537,6 +537,122 @@ export async function toggleTaskDone(formData: FormData) {
   revalidatePath("/calendar");
 }
 
+export async function setTaskStatus(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+  const status = getString(formData, "status");
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  if (!isTaskStatus(status)) {
+    throw new Error("Unknown task status");
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+
+    await db
+      .update(tasks)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
+  revalidatePath("/projects");
+}
+
+function getTargetDueDate(formData: FormData) {
+  const value = getString(formData, "dueDate");
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Due date must use yyyy-mm-dd format");
+  }
+
+  return parseDateInputValue(value);
+}
+
+// Moves a task to the given day. The context menu sends the exact date it
+// showed as today or tomorrow, so the label and the result always match.
+// A task with a time block keeps its clock time and duration on the new day;
+// an all-day task stays all-day.
+export async function moveTaskToDay(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+  const dueDate = getTargetDueDate(formData);
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    const task = await db.query.tasks.findFirst({
+      where: and(eq(tasks.id, taskId), eq(tasks.userId, userId))
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    if (task.dueDate === dueDate) {
+      return;
+    }
+
+    let timeBlockStart: Date | null = null;
+    let timeBlockEnd: Date | null = null;
+    const startMinutes = getMinutesFromStartOfDay(task.timeBlockStart);
+
+    if (task.timeBlockStart && startMinutes !== null) {
+      const time = `${String(Math.floor(startMinutes / 60)).padStart(2, "0")}:${String(
+        startMinutes % 60
+      ).padStart(2, "0")}`;
+      const durationMs = task.timeBlockEnd
+        ? task.timeBlockEnd.getTime() - task.timeBlockStart.getTime()
+        : getTaskSizeDurationMinutes(task.size) * 60_000;
+
+      timeBlockStart = combineDateAndTime(dueDate, time);
+      timeBlockEnd = new Date(timeBlockStart.getTime() + durationMs);
+    }
+
+    await db
+      .update(tasks)
+      .set({
+        dueDate,
+        dayPriority: await getNextDayPriority(db, userId, dueDate),
+        timeBlockStart,
+        timeBlockEnd,
+        updatedAt: new Date()
+      })
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
+  revalidatePath("/projects");
+}
+
+// Deletes a task in place, without the redirect that the task form's
+// delete button relies on. Used by context menus.
+export async function deleteTaskInPlace(formData: FormData) {
+  const taskId = getString(formData, "taskId");
+
+  if (!taskId) {
+    throw new Error("Task id is required");
+  }
+
+  await withDb(async (db) => {
+    const userId = await getCurrentUserId(db);
+    await db
+      .delete(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)));
+  });
+
+  revalidatePath("/");
+  revalidatePath("/calendar");
+  revalidatePath("/projects");
+}
+
 export async function moveTaskOnTodayBoard(formData: FormData) {
   const taskId = getString(formData, "taskId");
   const destination = getTodayBoardDestination(formData);

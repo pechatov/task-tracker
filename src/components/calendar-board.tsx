@@ -42,15 +42,23 @@ import type {
   EventInput,
   DateSelectArg
 } from "@fullcalendar/core";
-import type { CSSProperties, ReactNode } from "react";
+import type { Route } from "next";
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  ReactNode
+} from "react";
 import {
   AlertTriangle,
   CalendarDays,
+  CalendarPlus,
   ChevronLeft,
   ChevronRight,
+  Copy,
   ExternalLink,
   GripVertical,
   Inbox,
+  Link2,
   Plus,
   Repeat2
 } from "lucide-react";
@@ -69,12 +77,20 @@ import {
   scheduleTaskFromCalendar,
   toggleTaskDone
 } from "@/app/actions/tasks";
+import {
+  ContextMenu,
+  shouldUseNativeContextMenu,
+  useContextMenu,
+  type ContextMenuEntry
+} from "@/components/context-menu";
+import { useTaskContextMenu } from "@/components/task-context-menu";
 import { TaskTitle } from "@/components/task-title";
 import type { CalendarItem } from "@/lib/calendar/data";
 import {
   combineDateAndTime,
   formatDateInput,
-  formatDisplayDate
+  formatDisplayDate,
+  formatDisplayTime
 } from "@/lib/date";
 import type { TaskRow } from "@/lib/tasks/data";
 import {
@@ -110,13 +126,19 @@ type CalendarDropPreviewStyle = CSSProperties & {
   "--calendar-drop-preview-color": string;
 };
 
-type CalendarTaskEventElement = HTMLElement & {
+type CalendarEventElement = HTMLElement & {
+  calendarContextMenu?: (event: MouseEvent) => void;
   calendarTaskDoubleClick?: (event: MouseEvent) => void;
 };
+
+type CalendarSlot =
+  | { allDay: true; date: string }
+  | { allDay: false; date: string; start: Date };
 
 const sidebarListOrder: CalendarSidebarList[] = ["backlog", "overdue"];
 const taskOpenClickDelayMs = 450;
 const calendarClockIntervalMs = 60_000;
+const calendarSlotMinutes = 30;
 
 const calendarSidebarCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
@@ -146,6 +168,20 @@ function makeSidebarLists(
     backlog: backlogTasks,
     overdue: overdueTasks
   };
+}
+
+// Changes whenever the server sends different sidebar contents, so local
+// drag-and-drop state can be reset without remounting the whole board (a
+// remount would also reset the calendar to the current week).
+function getSidebarSignature(backlogTasks: TaskRow[], overdueTasks: TaskRow[]) {
+  return [
+    ...backlogTasks.map(
+      (task) => `backlog:${task.id}:${task.title}:${task.dayPriority}`
+    ),
+    ...overdueTasks.map(
+      (task) => `overdue:${task.id}:${task.title}:${task.dueDate}:${task.dayPriority}`
+    )
+  ].join("|");
 }
 
 function findSidebarList(
@@ -467,11 +503,10 @@ function findElementCrossingPoint<T extends HTMLElement>(
   );
 }
 
-function getCalendarDropFormData(
+function getCalendarSlotAtPoint(
   root: HTMLElement,
-  point: { x: number; y: number },
-  task: TaskRow
-) {
+  point: { x: number; y: number }
+): CalendarSlot | null {
   const allDayCell = findElementContainingPoint<HTMLElement>(
     root,
     ".fc-daygrid-day[data-date]",
@@ -480,13 +515,7 @@ function getCalendarDropFormData(
   );
 
   if (allDayCell?.dataset.date) {
-    const formData = new FormData();
-    formData.set("taskId", task.id);
-    formData.set("isAllDay", "true");
-    formData.set("wasAllDay", "true");
-    formData.set("startsAt", allDayCell.dataset.date);
-    formData.set("endsAt", addDateDays(allDayCell.dataset.date, 1));
-    return formData;
+    return { allDay: true, date: allDayCell.dataset.date };
   }
 
   const timeColumn = findElementContainingPoint<HTMLElement>(
@@ -514,15 +543,58 @@ function getCalendarDropFormData(
     return null;
   }
 
-  const end = addMinutes(start, getTaskSizeDurationMinutes(task.size));
+  return { allDay: false, date, start };
+}
+
+function getCalendarDropFormData(
+  root: HTMLElement,
+  point: { x: number; y: number },
+  task: TaskRow
+) {
+  const slot = getCalendarSlotAtPoint(root, point);
+
+  if (!slot) {
+    return null;
+  }
+
   const formData = new FormData();
   formData.set("taskId", task.id);
+
+  if (slot.allDay) {
+    formData.set("isAllDay", "true");
+    formData.set("wasAllDay", "true");
+    formData.set("startsAt", slot.date);
+    formData.set("endsAt", addDateDays(slot.date, 1));
+    return formData;
+  }
+
+  const end = addMinutes(slot.start, getTaskSizeDurationMinutes(task.size));
   formData.set("isAllDay", "false");
   formData.set("wasAllDay", "true");
-  formData.set("startsAt", start.toISOString());
+  formData.set("startsAt", slot.start.toISOString());
   formData.set("endsAt", end.toISOString());
 
   return formData;
+}
+
+function getCreateTaskHref(slot?: {
+  allDay: boolean;
+  end: string;
+  start: string;
+}): Route {
+  const params = new URLSearchParams({ create: "task" });
+
+  if (slot) {
+    params.set("start", slot.start);
+    params.set("end", slot.end);
+    params.set("allDay", slot.allDay ? "true" : "false");
+  }
+
+  return `/calendar?${params.toString()}`;
+}
+
+function copyToClipboard(text: string) {
+  void navigator.clipboard?.writeText(text).catch(() => undefined);
 }
 
 function getCalendarDropPreview(
@@ -628,11 +700,13 @@ function SidebarDropZone({
 
 function SortableCalendarTask({
   list,
+  onContextMenu,
   onOpenTask,
   showDueDate = false,
   task
 }: {
   list: CalendarSidebarList;
+  onContextMenu: (event: ReactMouseEvent<HTMLElement>, task: TaskRow) => void;
   onOpenTask: (taskId: string) => void;
   showDueDate?: boolean;
   task: TaskRow;
@@ -671,6 +745,7 @@ function SortableCalendarTask({
         .filter(Boolean)
         .join(" ")}
       onClick={() => onOpenTask(task.id)}
+      onContextMenu={(event) => onContextMenu(event, task)}
       ref={setRowRef}
       style={style}
       {...attributes}
@@ -733,6 +808,21 @@ export function CalendarBoard({
   const sidebarListsRef = useRef(sidebarLists);
   const dragStartSidebarListsRef = useRef<CalendarSidebarLists | null>(null);
   const activeOriginListRef = useRef<CalendarSidebarList | null>(null);
+  const sidebarSignature = useMemo(
+    () => getSidebarSignature(backlogTasks, overdueTasks),
+    [backlogTasks, overdueTasks]
+  );
+  const syncedSidebarSignatureRef = useRef(sidebarSignature);
+  const { closeMenu, menu, openMenu } = useContextMenu();
+  const getTaskOpenHref = useCallback(
+    (taskId: string): Route => `/calendar?taskId=${taskId}`,
+    []
+  );
+  const { getTaskMenuEntries, isPending: isMenuActionPending } =
+    useTaskContextMenu({ getOpenHref: getTaskOpenHref });
+  const eventContextMenuRef = useRef<
+    (jsEvent: MouseEvent, eventId: string) => void
+  >(() => undefined);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -755,6 +845,16 @@ export function CalendarBoard({
     sidebarListsRef.current = resolved;
     setSidebarListsState(resolved);
   }
+
+  useEffect(() => {
+    if (syncedSidebarSignatureRef.current === sidebarSignature) {
+      return;
+    }
+
+    syncedSidebarSignatureRef.current = sidebarSignature;
+    sidebarListsRef.current = initialSidebarLists;
+    setSidebarListsState(initialSidebarLists);
+  }, [initialSidebarLists, sidebarSignature]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -895,15 +995,14 @@ export function CalendarBoard({
   }
 
   function onSelect(arg: DateSelectArg) {
-    const params = new URLSearchParams({
-      create: "task",
-      start: arg.startStr,
-      end: arg.endStr,
-      allDay: arg.allDay ? "true" : "false"
-    });
-
     getCalendarApi()?.unselect();
-    router.push(`/calendar?${params.toString()}`);
+    router.push(
+      getCreateTaskHref({
+        allDay: arg.allDay,
+        end: arg.endStr,
+        start: arg.startStr
+      })
+    );
   }
 
   function clearPendingTaskOpen() {
@@ -1085,33 +1184,193 @@ export function CalendarBoard({
     });
   }
 
+  function getMeetingMenuEntries(item: CalendarItem): ContextMenuEntry[] {
+    const eventUrl = item.eventUrl;
+    const entries: ContextMenuEntry[] = [];
+
+    if (eventUrl) {
+      entries.push(
+        {
+          id: "open-meeting",
+          label: "Открыть встречу",
+          icon: ExternalLink,
+          onSelect: () => window.open(eventUrl, "_blank", "noopener,noreferrer")
+        },
+        {
+          id: "copy-link",
+          label: "Скопировать ссылку",
+          icon: Link2,
+          onSelect: () => copyToClipboard(eventUrl)
+        }
+      );
+    }
+
+    entries.push({
+      id: "copy-title",
+      label: "Скопировать название",
+      icon: Copy,
+      onSelect: () => copyToClipboard(item.title)
+    });
+
+    return entries;
+  }
+
+  function onCalendarEventContextMenu(jsEvent: MouseEvent, eventId: string) {
+    const item = items.find((candidate) => candidate.id === eventId);
+
+    if (!item) {
+      return;
+    }
+
+    clearPendingTaskOpen();
+
+    if (item.kind === "task" && item.taskId && item.taskStatus) {
+      openMenu(
+        jsEvent,
+        getTaskMenuEntries({
+          dueDate: item.taskDueDate,
+          id: item.taskId,
+          status: item.taskStatus,
+          title: item.title
+        }),
+        item.title
+      );
+      return;
+    }
+
+    openMenu(
+      jsEvent,
+      getMeetingMenuEntries(item),
+      item.sourceLabel ? `${item.title} · ${item.sourceLabel}` : item.title
+    );
+  }
+
+  // FullCalendar attaches DOM listeners once per event element, so they call
+  // through a ref to always see the latest items.
+  useEffect(() => {
+    eventContextMenuRef.current = onCalendarEventContextMenu;
+  });
+
+  function onSlotContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    const root = calendarDropRootRef.current;
+
+    if (
+      !root ||
+      event.defaultPrevented ||
+      shouldUseNativeContextMenu(event) ||
+      (event.target as HTMLElement).closest(".fc-event")
+    ) {
+      return;
+    }
+
+    const slot = getCalendarSlotAtPoint(root, {
+      x: event.clientX,
+      y: event.clientY
+    });
+
+    if (!slot) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const allDayHref = getCreateTaskHref({
+      allDay: true,
+      end: addDateDays(slot.date, 1),
+      start: slot.date
+    });
+    const dayLabel = formatDisplayDate(slot.date);
+    const entries: ContextMenuEntry[] = [];
+
+    if (!slot.allDay) {
+      const timedHref = getCreateTaskHref({
+        allDay: false,
+        end: addMinutes(slot.start, calendarSlotMinutes).toISOString(),
+        start: slot.start.toISOString()
+      });
+
+      entries.push({
+        id: "create-timed",
+        label: `Новая задача на ${formatDisplayTime(slot.start)}`,
+        icon: Plus,
+        onSelect: () => router.push(timedHref)
+      });
+    }
+
+    entries.push(
+      {
+        id: "create-all-day",
+        label: "Новая задача на весь день",
+        icon: CalendarPlus,
+        onSelect: () => router.push(allDayHref)
+      },
+      {
+        id: "create-backlog",
+        label: "Новая задача в бэклог",
+        icon: Inbox,
+        onSelect: () => router.push(getCreateTaskHref())
+      }
+    );
+
+    openMenu(event, entries, dayLabel);
+  }
+
+  function onSidebarTaskContextMenu(
+    event: ReactMouseEvent<HTMLElement>,
+    task: TaskRow
+  ) {
+    if (shouldUseNativeContextMenu(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    openMenu(event, getTaskMenuEntries(task), task.title);
+  }
+
   function onEventDidMount(arg: { el: HTMLElement; event: EventDropArg["event"] }) {
+    const element = arg.el as CalendarEventElement;
+    const eventId = arg.event.id;
+    const contextMenuHandler = (event: MouseEvent) => {
+      if (shouldUseNativeContextMenu(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      eventContextMenuRef.current(event, eventId);
+    };
+
+    element.calendarContextMenu = contextMenuHandler;
+    element.addEventListener("contextmenu", contextMenuHandler);
+
     const taskId = arg.event.extendedProps.taskId;
 
     if (typeof taskId !== "string") {
       return;
     }
 
-    const element = arg.el as CalendarTaskEventElement;
-    const handler = (event: MouseEvent) => {
+    const doubleClickHandler = (event: MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
       onTaskDoubleClick(taskId);
     };
 
-    element.calendarTaskDoubleClick = handler;
-    element.addEventListener("dblclick", handler);
+    element.calendarTaskDoubleClick = doubleClickHandler;
+    element.addEventListener("dblclick", doubleClickHandler);
   }
 
   function onEventWillUnmount(arg: { el: HTMLElement }) {
-    const element = arg.el as CalendarTaskEventElement;
+    const element = arg.el as CalendarEventElement;
 
-    if (!element.calendarTaskDoubleClick) {
-      return;
+    if (element.calendarContextMenu) {
+      element.removeEventListener("contextmenu", element.calendarContextMenu);
+      delete element.calendarContextMenu;
     }
 
-    element.removeEventListener("dblclick", element.calendarTaskDoubleClick);
-    delete element.calendarTaskDoubleClick;
+    if (element.calendarTaskDoubleClick) {
+      element.removeEventListener("dblclick", element.calendarTaskDoubleClick);
+      delete element.calendarTaskDoubleClick;
+    }
   }
 
   function removeSidebarTask(taskId: string) {
@@ -1425,7 +1684,9 @@ export function CalendarBoard({
             </div>
           </div>
         </div>
-        {isPending ? <div className="calendar-saving">Сохраняю изменения...</div> : null}
+        {isPending || isMenuActionPending ? (
+          <div className="calendar-saving">Сохраняю изменения...</div>
+        ) : null}
         {dragSource !== "none" ? (
           <div className="calendar-drop-banner">
             <CalendarDays size={15} />
@@ -1434,7 +1695,11 @@ export function CalendarBoard({
               : "Бросьте на строку «Весь день», чтобы запланировать задачу на день без конкретного времени"}
           </div>
         ) : null}
-        <div className="calendar-scroll-area" ref={calendarDropRootRef}>
+        <div
+          className="calendar-scroll-area"
+          onContextMenu={onSlotContextMenu}
+          ref={calendarDropRootRef}
+        >
           {calendarDropPreview ? (
             <div
               className="calendar-drop-slot-preview"
@@ -1596,6 +1861,7 @@ export function CalendarBoard({
                   <SortableCalendarTask
                     key={task.id}
                     list="backlog"
+                    onContextMenu={onSidebarTaskContextMenu}
                     onOpenTask={(taskId) => router.push(`/calendar?taskId=${taskId}`)}
                     task={task}
                   />
@@ -1623,6 +1889,7 @@ export function CalendarBoard({
                   <SortableCalendarTask
                     key={task.id}
                     list="overdue"
+                    onContextMenu={onSidebarTaskContextMenu}
                     onOpenTask={(taskId) => router.push(`/calendar?taskId=${taskId}`)}
                     showDueDate
                     task={task}
@@ -1639,6 +1906,8 @@ export function CalendarBoard({
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <ContextMenu menu={menu} onClose={closeMenu} />
     </div>
   );
 }

@@ -31,6 +31,7 @@ export type CalendarItem = {
   taskId: string | null;
   taskSize: TaskSize | null;
   taskStatus: TaskStatus | null;
+  taskDueDate: string | null;
   taskProjectName: string | null;
   taskProjectColor: string | null;
   taskIsRecurring: boolean;
@@ -242,6 +243,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
           taskId: task.id,
           taskSize: task.size,
           taskStatus: task.status,
+          taskDueDate: task.dueDate,
           taskProjectName: task.projectName,
           taskProjectColor: task.projectColor,
           taskIsRecurring: task.recurringTaskId !== null,
@@ -267,6 +269,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
         taskId: task.id,
         taskSize: task.size,
         taskStatus: task.status,
+        taskDueDate: task.dueDate,
         taskProjectName: task.projectName,
         taskProjectColor: task.projectColor,
         taskIsRecurring: task.recurringTaskId !== null,
@@ -288,6 +291,7 @@ export async function getCalendarData(selectedTaskId?: string): Promise<Calendar
       taskId: null,
       taskSize: null,
       taskStatus: null,
+      taskDueDate: null,
       taskProjectName: null,
       taskProjectColor: null,
       taskIsRecurring: false,
