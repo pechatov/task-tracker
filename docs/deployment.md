@@ -51,8 +51,11 @@ ssh <deploy-target> 'docker ps'
 ```
 
 Use either root SSH keys or grant the deploy user access to the Docker socket.
-Without this, GitHub Actions can SSH into the host but cannot run
-`docker compose pull` or restart the app.
+If `docker ps` fails but `sudo -n docker ps` works, the deploy script falls
+back to passwordless sudo. This covers TrueNAS, which regenerates `/etc/group`
+on boot and drops the deploy user from the `docker` group. Without either,
+GitHub Actions can SSH into the host but cannot run `docker compose pull` or
+restart the app.
 
 ## Runner
 
